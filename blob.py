@@ -1,5 +1,5 @@
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import loadPrcFileData, NodePath, Vec3, InternalName
+from panda3d.core import loadPrcFileData, NodePath, Vec2, Vec3, InternalName
 from panda3d.core import Geom, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, GeomEnums
 from panda3d.core import GeomTrifans, GeomNode
 import struct
@@ -41,6 +41,8 @@ vertexFormat.add_array(arrayFormat)
 vertexFormat = GeomVertexFormat.register_format(vertexFormat)
 
 #stride = vertexFormat.arrays[0].stride # size of data row in bytes
+
+#def calcForce(pos, point)
 
 def calcDampedSHM(pos,vel,equilibriumPos,deltaTime,angularFreq):
 	assert (angularFreq >= 0.), f'SHM angular frequency parameter must be positive!'
@@ -228,42 +230,68 @@ class Player():
 		for vertex in range(12):
 			vertex += 1
 			vertex *= 3
-			pos: Vec3 = Vec3(floatView[vertex], floatView[vertex+1], floatView[vertex+2])
-			centrepoint: Vec3 = Vec3(floatView[0],floatView[1],floatView[2])
-			neighbour1: Vec3 = Vec3(floatView[(vertex-3)%36],floatView[(vertex-2)%36], floatView[(vertex-1)%36])
-			neighbour2: Vec3 = Vec3(floatView[(vertex+3)%36],floatView[(vertex+2)%36],floatView[(vertex+1)%36])
+			# pos: Vec3 = Vec3(floatView[vertex], floatView[vertex+1], floatView[vertex+2])
+			# centrepoint: Vec3 = Vec3(floatView[0],floatView[1],floatView[2])
+			# neighbour1: Vec3 = Vec3(floatView[(vertex-3)%36],floatView[(vertex-2)%36], floatView[(vertex-1)%36])
+			# neighbour2: Vec3 = Vec3(floatView[(vertex+3)%36],floatView[(vertex+2)%36],floatView[(vertex+1)%36])
 
-			midCentrepoint: Vec3 = Vec3((pos.x+centrepoint.x) / 2,(pos.y+centrepoint.y) / 2,(pos.z+centrepoint.z) / 2)
-			diffCentrepoint: Vec3 = Vec3(pos.x - centrepoint.x, pos.y - centrepoint.y, pos.z - centrepoint.z)
-			distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y + diffCentrepoint.z*diffCentrepoint.z)
+			# midCentrepoint: Vec3 = Vec3((pos.x+centrepoint.x) / 2,(pos.y+centrepoint.y) / 2,(pos.z+centrepoint.z) / 2)
+			# diffCentrepoint: Vec3 = Vec3(pos.x - centrepoint.x, pos.y - centrepoint.y, pos.z - centrepoint.z)
+			# distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y + diffCentrepoint.z*diffCentrepoint.z)
+			# centrepointForceMag: float = (radius - distCentrepoint) * volumeScale
+			# centrepointForce: Vec3 = (diffCentrepoint / np.linalg.norm(diffCentrepoint)) * centrepointForceMag
+
+			# midNeighbour1: Vec3 = Vec3((pos.x+neighbour1.x) / 2,(pos.y+neighbour1.y) / 2,(pos.z+neighbour1.z) / 2)
+			# diffNeighbour1: Vec3 = Vec3(pos.x - neighbour1.x, pos.y - neighbour1.y, pos.z - neighbour1.z)
+			# distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y + diffNeighbour1.z*diffNeighbour1.z)
+			# neighbour1Force: Vec3 = (diffNeighbour1 / np.linalg.norm(diffNeighbour1)) * (radius - distNeighbour1)
+
+			# midNeighbour2: Vec3 = Vec3((pos.x+neighbour2.x) / 2,(pos.y+neighbour2.y) / 2,(pos.z+neighbour2.z) / 2)
+			# diffNeighbour2: Vec3 = Vec3(pos.x - neighbour2.x, pos.y - neighbour2.y, pos.z - neighbour2.z)
+			# distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y + diffNeighbour2.z*diffNeighbour2.z)
+			# neighbour2Force: Vec3 = (diffNeighbour2 / np.linalg.norm(diffNeighbour2)) * (radius - distNeighbour2)
+
+			# averageForce: Vec3 = Vec3((centrepointForce.x + neighbour1Force.x + neighbour2Force.x) / 3.,
+			# 							(centrepointForce.y + neighbour1Force.y + neighbour2Force.y) / 3.,
+			# 							(centrepointForce.z + neighbour1Force.z + neighbour2Force.z) / 3.)
+			# avgMagnitude: float = np.sqrt(averageForce.x*averageForce.x+averageForce.y*averageForce.y+averageForce.z*averageForce.z)
+			pos: Vec2 = Vec2(floatView[vertex], floatView[vertex+1])
+			centrepoint: Vec2 = Vec2(floatView[0],floatView[1])
+			neighbour1: Vec2 = Vec2(floatView[(vertex-3)%36],floatView[(vertex-2)%36])
+			neighbour2: Vec2 = Vec2(floatView[(vertex+3)%36],floatView[(vertex+2)%36])
+
+			midCentrepoint: Vec2 = Vec2((pos.x+centrepoint.x) / 2,(pos.y+centrepoint.y) / 2)
+			diffCentrepoint: Vec2 = Vec2(pos.x - centrepoint.x, pos.y - centrepoint.y)
+			distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y)
 			centrepointForceMag: float = (radius - distCentrepoint) * volumeScale
-			centrepointForce: Vec3 = (diffCentrepoint / np.linalg.norm(diffCentrepoint)) * centrepointForceMag
+			centrepointForce: Vec2 = (diffCentrepoint / np.linalg.norm(diffCentrepoint)) * centrepointForceMag
 
-			midNeighbour1: Vec3 = Vec3((pos.x+neighbour1.x) / 2,(pos.y+neighbour1.y) / 2,(pos.z+neighbour1.z) / 2)
-			diffNeighbour1: Vec3 = Vec3(pos.x - neighbour1.x, pos.y - neighbour1.y, pos.z - neighbour1.z)
-			distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y + diffNeighbour1.z*diffNeighbour1.z)
-			neighbour1Force: Vec3 = (diffNeighbour1 / np.linalg.norm(diffNeighbour1)) * (radius - distNeighbour1)
+			midNeighbour1: Vec2 = Vec2((pos.x + neighbour1.x) / 2,(pos.y+neighbour1.y) / 2)
+			diffNeighbour1: Vec2 = Vec2(pos.x - neighbour1.x, pos.y - neighbour1.y)
+			distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
+			neighbour1Force: Vec2 = (diffNeighbour1 / np.linalg.norm(diffNeighbour1)) * (radius - distNeighbour1)
 
-			midNeighbour2: Vec3 = Vec3((pos.x+neighbour2.x) / 2,(pos.y+neighbour2.y) / 2,(pos.z+neighbour2.z) / 2)
-			diffNeighbour2: Vec3 = Vec3(pos.x - neighbour2.x, pos.y - neighbour2.y, pos.z - neighbour2.z)
-			distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y + diffNeighbour2.z*diffNeighbour2.z)
-			neighbour2Force: Vec3 = (diffNeighbour2 / np.linalg.norm(diffNeighbour2)) * (radius - distNeighbour2)
+			midNeighbour2: Vec2 = Vec2((pos.x+neighbour2.x) / 2,(pos.y+neighbour2.y) / 2)
+			diffNeighbour2: Vec2 = Vec2(pos.x - neighbour2.x, pos.y - neighbour2.y)
+			distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
+			neighbour2Force: Vec2 = (diffNeighbour2 / np.linalg.norm(diffNeighbour2)) * (radius - distNeighbour2)
 
 			averageForce: Vec3 = Vec3((centrepointForce.x + neighbour1Force.x + neighbour2Force.x) / 3.,
 										(centrepointForce.y + neighbour1Force.y + neighbour2Force.y) / 3.,
-										(centrepointForce.z + neighbour1Force.z + neighbour2Force.z) / 3.)
-			avgMagnitude: float = np.sqrt(averageForce.x*averageForce.x+averageForce.y*averageForce.y+averageForce.z*averageForce.z)
+										0.)
+			avgMagnitude: float = np.absolute(np.sqrt(averageForce.x*averageForce.x+averageForce.y*averageForce.y))
 			self.velocity += averageForce
-			pos, self.velocity = calcDampedSHM(pos,self.velocity,pos + averageForce,globalClock.getDt(),1./avgMagnitude)
+			pos: Vec3 = Vec3(pos.x,pos.y,0.)
+			pos, self.velocity = calcDampedSHM(pos,self.velocity,pos + averageForce,globalClock.getDt(),avgMagnitude)
 
 			floatView[vertex]   = pos.x
 			floatView[vertex+1] = pos.y
-			floatView[vertex+2] = pos.z
+			floatView[vertex+2] = 0. # pos.z
 		return task.cont
 
 	def move(self, direction) -> bool:
 		#print(self.view[1].to_bytes())
-		floatView = memoryview(self.vertexArray).cast('B').cast('f')
+		floatView = memoryview(self.vertexData.modify_array(0)).cast('B').cast('f')
 		if direction == "left":
 			# go left
 			xpos = floatView[0]
