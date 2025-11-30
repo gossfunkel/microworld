@@ -7,9 +7,9 @@ import numpy as np
 #import array
 
 epsilon = 0.0001
-dampRatio = 0.8 # constant variable that sets springyness of object
-distBetweenEdgepoints = 0.517472489875 # hopefully should be compatible with the radius
-volumeScaleFactor = 1.0 - epsilon
+dampRatio = 0.85 # constant variable that sets springyness of object
+distBetweenEdgepoints = 0.52 # hopefully should be compatible with the radius
+volumeScaleFactor = 1.2
 radius = 1.0 - epsilon
 
 config_vars: str = """
@@ -229,12 +229,16 @@ class Player():
 			vertex += 1
 			# area = d(x) * avg(y), i.e. (x1 - x2) * (y1 + y2) / 2
 			area += (floatView[(vertex+3)%36] - floatView[vertex]) * ((floatView[(vertex+4)%36] + floatView[vertex+1])/2.)
-		#volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
-		volumeScale: float = 1.0
+		volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
+		#volumeScale: float = 1.0
 		# force calculation
 		for vertex in range(12):
+			# TODO
+			# so i think basically the issue is that im putting the force into the equilibrium position of the spring, when that should be defined
+			# 	by the position of the centrepoint alone. Then the other points should be balanced by the volume-preserving constraint and the
+			# 	neighbour constraints as forces
+			vertex += 1
 			vertex *= 3
-			#vertex += 1
 
 			# pos: Vec3 = Vec3(floatView[vertex], floatView[vertex+1], floatView[vertex+2])
 			# centrepoint: Vec3 = Vec3(floatView[0],floatView[1],floatView[2])
@@ -263,44 +267,52 @@ class Player():
 			# avgMagnitude: float = np.sqrt(averageForce.x*averageForce.x+averageForce.y*averageForce.y+averageForce.z*averageForce.z)
 			pos: Vec2 = Vec2(floatView[vertex], floatView[vertex+1])
 			centrepoint: Vec2 = Vec2(floatView[0],floatView[1])
-			neighbour1: Vec2 = Vec2(floatView[(vertex-3)%36],floatView[(vertex-2)%36])
-			neighbour2: Vec2 = Vec2(floatView[(vertex+3)%36],floatView[(vertex+4)%36])
+			neighbour1: Vec2 = Vec2(floatView[(vertex-3)%39],floatView[(vertex-2)%39])
+			neighbour2: Vec2 = Vec2(floatView[(vertex+3)%39],floatView[(vertex+4)%39])
 
 			midCentrepoint: Vec2 = Vec2((pos.x+centrepoint.x) / 2,(pos.y+centrepoint.y) / 2)
 			diffCentrepoint: Vec2 = Vec2(pos.x - centrepoint.x, pos.y - centrepoint.y)
 			distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y)
 			print("distance to centrepoint: " + str(distCentrepoint))
-			centrepointForceMag: float = np.absolute((radius - distCentrepoint) * volumeScale)
-			centrepointForce: Vec2 = (diffCentrepoint / np.linalg.norm(diffCentrepoint)) * centrepointForceMag
+			centrepointForceMag: float = np.absolute(radius - distCentrepoint)
+			directionCentrepoint: Vec2 = diffCentrepoint.normalized()
+			print("direction to centrepoint: " + str(directionCentrepoint))
+			centrepointForce: Vec2 = directionCentrepoint.normalized() * centrepointForceMag
 			print("force from centrepoint: " + str(centrepointForce))
 
 			midNeighbour1: Vec2 = Vec2((pos.x + neighbour1.x) / 2,(pos.y+neighbour1.y) / 2)
 			diffNeighbour1: Vec2 = Vec2(pos.x - neighbour1.x, pos.y - neighbour1.y)
 			distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
-			neighbour1Force: Vec2 = (diffNeighbour1 / np.linalg.norm(diffNeighbour1)) * (radius - distNeighbour1)
+			neighbour1Force: Vec2 = diffNeighbour1.normalized() * (distBetweenEdgepoints - distNeighbour1)
 			print("force from neighbour1: " + str(neighbour1Force))
 
 			midNeighbour2: Vec2 = Vec2((pos.x+neighbour2.x) / 2,(pos.y+neighbour2.y) / 2)
 			diffNeighbour2: Vec2 = Vec2(pos.x - neighbour2.x, pos.y - neighbour2.y)
 			distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
-			neighbour2Force: Vec2 = (diffNeighbour2 / np.linalg.norm(diffNeighbour2)) * (radius - distNeighbour2)
+			neighbour2Force: Vec2 = diffNeighbour2.normalized() * (distBetweenEdgepoints - distNeighbour2)
 			print("force from neighbour2: " + str(neighbour2Force))
 
 			#sumForce: Vec2 = Vec2((centrepointForce.getX() + neighbour1Force.getX() + neighbour2Force.getX()) / 3.,
 			#						(centrepointForce.getY() + neighbour1Force.getY() + neighbour2Force.getY()) / 3.)
-			sumForce: Vec2 = (centrepointForce + neighbour1Force + neighbour2Force) / 3.
+			sumForce: Vec2 = neighbour1Force + neighbour2Force
 			print(">>> total force vector: " + str(sumForce))
-			print(">>> total force components: [x: " + str(sumForce.getX()) + ", y: " + str(sumForce.getY()) + "]")
-			if np.isnan(sumForce.x): sumForce.x = 0.
-			if np.isnan(sumForce.y): sumForce.y = 0.
-			averageForce: float = sumForce.x * sumForce.x + sumForce.y * sumForce.y
+			print(">>> total force components: [x: " + str(sumForce[0]) + ", y: " + str(sumForce[1]) + "]")
+			if np.isnan(sumForce[0]): sumForce[0] = 0.
+			if np.isnan(sumForce[1]): sumForce[1] = 0.
+			averageForce: float = sumForce[0] * sumForce[0] + sumForce[1] * sumForce[1]
 			print("average force: " + str(averageForce))
 			avgMagnitude: float = np.sqrt(averageForce)
 			print("average force magnitude: " + str(avgMagnitude))
-			self.velocity += Vec2(sumForce.x,sumForce.y)
+			self.velocity = sumForce
+			sprungPos, self.velocity = calcDampedSHM(pos,self.velocity,centrepoint+(directionCentrepoint*radius),globalClock.getDt(),5.)
 			#pos: Vec3 = Vec3(pos.x,pos.y,0.)
-			pos, self.velocity = calcDampedSHM(pos,self.velocity,pos + sumForce,globalClock.getDt(),avgMagnitude)
+			pos = sprungPos + self.velocity
+			print(">>>>>NEW POSITION: " + str(pos))
+			print(">>>>>NEW VELOCITY: " + str(self.velocity))
+			print("=====")
 
+			assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
+			assert not np.isnan(pos.y), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
 			floatView[vertex]   = pos.x if not np.isnan(pos.x) else 0
 			floatView[vertex+1] = pos.y if not np.isnan(pos.y) else 0
 			floatView[vertex+2] = 0. # pos.z
