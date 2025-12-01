@@ -7,10 +7,10 @@ import numpy as np
 #import array
 
 epsilon = 0.0001
-dampRatio = 0.85 # constant variable that sets springyness of object
-distBetweenEdgepoints = .51 # hopefully should be compatible with the radius
-#volumeScaleFactor = 1.
-radius = 1.0
+dampRatio = .75 # constant variable that sets springyness of object
+distBetweenEdgepoints = .5 # hopefully should be compatible with the radius
+volumeScaleFactor = .5
+radius = 1.
 
 config_vars: str = """
 win-size 1200 800
@@ -121,19 +121,21 @@ class Player():
 		self.vertexData = GeomVertexData(name+'-verts', vertexFormat, Geom.UHStatic)
 		self.vertexData.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
-		# vertices: Numpy.Array = np.array([[pos.x, pos.y, 0.],
-		# 								[pos.x - .866, pos.y - .5, 0.],
-		# 								[pos.x - .5, pos.y - .866, 0.],
-		# 								[pos.x, pos.y - 1., 0.],
-		# 								[pos.x + .5, pos.y - .866, 0.],
-		# 								[pos.x + .866, pos.y - .5, 0.],
-		# 								[pos.x + 1., pos.y, 0.],
-		# 								[pos.x + .866, pos.y + .5, 0.],
-		# 								[pos.x + .5, pos.y + .866, 0.],
-		# 								[pos.x, pos.y + 1., 0.],
-		# 								[pos.x - .5, pos.y + .866, 0.],
-		# 								[pos.x - .866, pos.y + .5, 0.],
-		# 								[pos.x - 1., pos.y, 0.]], dtype='f')
+		#  save initial positions as basis vectors for the distance to centrepoint calculations
+		# 	to ensure positive and negative values scale appropriately per their angle to the centrepoint
+		self.basisVecs: Numpy.Array = np.array([pos.x, pos.y,
+										pos.x - .866, pos.y - .5,
+										pos.x - .5, pos.y - .866,
+										pos.x, pos.y - 1.,
+										pos.x + .5, pos.y - .866,
+										pos.x + .866, pos.y - .5,
+										pos.x + 1., pos.y,
+										pos.x + .866, pos.y + .5,
+										pos.x + .5, pos.y + .866,
+										pos.x, pos.y + 1.,
+										pos.x - .5, pos.y + .866,
+										pos.x - .866, pos.y + .5,
+										pos.x - 1., pos.y], dtype='f')
 		# vertexNorms: Numpy.Array = np.array([[0.,0.,1.], ] * 13, dtype='f')
 		#vertexCols: Numpy.Array = np.array([[col[0], col[1], col[2], 255], ] * 13)
 
@@ -147,45 +149,46 @@ class Player():
 		#positionView[:] = np.hstack((vertices, vertexNorms)).astype(np.float32)
 		colourView = memoryview(self.vertexData.modify_array(2)).cast('B')
 
+
 		vertexValues = bytearray()
 		# positionView[:] = vertexValues
 
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x, pos.y, 0.))
+			self.basisVecs[0], self.basisVecs[1], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x - .866, pos.y - .5, 0.))
+			self.basisVecs[2], self.basisVecs[3], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x - .5, pos.y - .866, 0.))
+			self.basisVecs[4], self.basisVecs[5], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x, pos.y - 1, 0.))
+			self.basisVecs[6], self.basisVecs[7], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x + .5, pos.y - .866, 0.))
+			self.basisVecs[8], self.basisVecs[9], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x + .866, pos.y - .5, 0.))
+			self.basisVecs[10], self.basisVecs[11], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x + 1, pos.y, 0.))
+			self.basisVecs[12], self.basisVecs[13], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x + .866, pos.y + .5, 0.))
+			self.basisVecs[14], self.basisVecs[15], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x + .5, pos.y + .866, 0.))
+			self.basisVecs[16], self.basisVecs[17], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x, pos.y + 1, 0.))
+			self.basisVecs[18], self.basisVecs[19], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x - .5, pos.y + .866, 0.))
+			self.basisVecs[20], self.basisVecs[21], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			pos.x - .866, pos.y + .5, 0.))
+			self.basisVecs[22], self.basisVecs[23], 0.))
 		vertexValues.extend(struct.pack(
 			#'6f4B',
 			'3f',
@@ -223,18 +226,17 @@ class Player():
 		floatView = memoryview(self.vertexData.modify_array(0)).cast('B').cast('f')
 		#print(floatView.itemsize)
 		# trapezoid integration
-		# area: float = 0.0
-		# for vertex in range(12):
-		# 	vertex *= 3
-		# 	vertex += 1
-		# 	# area = d(x) * avg(y), i.e. (x1 - x2) * (y1 + y2) / 2
-		# 	area += (floatView[(vertex+3)%36] - floatView[vertex]) * ((floatView[(vertex+4)%36] + floatView[vertex+1])/2.)
-		# volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
+		area: float = 0.0
+		for vertex in range(12):
+			vertex *= 3
+			vertex += 1
+			# area = d(x) * avg(y), i.e. (x1 - x2) * (y1 + y2) / 2
+			area += (floatView[(vertex+3)%36] - floatView[vertex]) * ((floatView[(vertex+4)%36] + floatView[vertex+1])/2.)
+		volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
 		#volumeScale: float = 1.0
 		# force calculation
 		for vertex in range(12):
-			# TODO
-			# i think the edge points aren't balanced right
+			basis: Vec2 = Vec2(self.basisVecs[vertex],self.basisVecs[vertex+1])
 			vel: Vec2 = self.velocities[vertex]
 			vertex += 1
 			vertex *= 3
@@ -252,6 +254,7 @@ class Player():
 			directionCentrepoint: Vec2 = diffCentrepoint.normalized()
 			print("direction to centrepoint: " + str(directionCentrepoint))
 			centrepointForce: Vec2 = directionCentrepoint.normalized() * centrepointForceMag
+			#centrepointForce: Vec2 = basis * centrepointForceMag
 			print("force from centrepoint: " + str(centrepointForce))
 
 			#midNeighbour1: Vec2 = np.divide(2., pos + neighbour1)
@@ -281,7 +284,8 @@ class Player():
 			print("average force: " + str(averageForce))
 			avgMagnitude: float = np.sqrt(averageForce)
 			print("average force magnitude: " + str(avgMagnitude))
-			sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+(directionCentrepoint*radius),globalClock.getDt(),avgMagnitude)
+			sprungPos, vel = calcDampedSHM(pos,vel,centrepoint-(directionCentrepoint*radius),globalClock.getDt(),2.)
+			#sprungPos, vel = calcDampedSHM(pos,vel,(basis),globalClock.getDt(),2.)
 			#sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+(directionCentrepoint*radius),1/120,1.)
 			#pos: Vec3 = Vec3(pos.x,pos.y,0.)
 			pos = sprungPos# + vel
