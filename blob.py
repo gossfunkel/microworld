@@ -7,9 +7,9 @@ import numpy as np
 #import array
 
 epsilon = 0.0001
-dampRatio = .75 # constant variable that sets springyness of object
-distBetweenEdgepoints = .5 # hopefully should be compatible with the radius
-volumeScaleFactor = .5
+dampRatio = .3 # constant variable that sets springyness of object
+distBetweenEdgepoints = .51 # hopefully should be compatible with the radius
+volumeScaleFactor = 1.0
 radius = 1.
 
 config_vars: str = """
@@ -118,24 +118,25 @@ def calcDampedSHM(pos,vel,equilibriumPos,deltaTime,angularFreq):
 class Player():
 	def __init__(self, name: str, pos: Vec2, col: tuple) -> None:
 		self.pos: Vec2 = pos
+		self.size: float = 5.
 		self.vertexData = GeomVertexData(name+'-verts', vertexFormat, Geom.UHStatic)
 		self.vertexData.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
 		#  save initial positions as basis vectors for the distance to centrepoint calculations
 		# 	to ensure positive and negative values scale appropriately per their angle to the centrepoint
-		self.basisVecs: Numpy.Array = np.array([pos.x, pos.y,
-										pos.x - .866, pos.y - .5,
-										pos.x - .5, pos.y - .866,
-										pos.x, pos.y - 1.,
-										pos.x + .5, pos.y - .866,
-										pos.x + .866, pos.y - .5,
-										pos.x + 1., pos.y,
-										pos.x + .866, pos.y + .5,
-										pos.x + .5, pos.y + .866,
-										pos.x, pos.y + 1.,
-										pos.x - .5, pos.y + .866,
-										pos.x - .866, pos.y + .5,
-										pos.x - 1., pos.y], dtype='f')
+		self.basisVecs: Numpy.Array = np.array([0., 0.,
+										-.866, -.5,
+										-.5, -.866,
+										0., -1.,
+										.5, -.866,
+										.866, -.5,
+										1., 0.,
+										.866, .5,
+										.5, .866,
+										0., 1.,
+										-.5, .866,
+										-.866, .5,
+										-1., 0.], dtype='f')
 		# vertexNorms: Numpy.Array = np.array([[0.,0.,1.], ] * 13, dtype='f')
 		#vertexCols: Numpy.Array = np.array([[col[0], col[1], col[2], 255], ] * 13)
 
@@ -155,44 +156,43 @@ class Player():
 
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[0], self.basisVecs[1], 0.))
+			pos.x+self.basisVecs[0], pos.y+self.basisVecs[1], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[2], self.basisVecs[3], 0.))
+			pos.x+self.basisVecs[2], pos.y+self.basisVecs[3], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[4], self.basisVecs[5], 0.))
+			pos.x+self.basisVecs[4], pos.y+self.basisVecs[5], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[6], self.basisVecs[7], 0.))
+			pos.x+self.basisVecs[6], pos.y+self.basisVecs[7], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[8], self.basisVecs[9], 0.))
+			pos.x+self.basisVecs[8], pos.y+self.basisVecs[9], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[10], self.basisVecs[11], 0.))
+			pos.x+self.basisVecs[10], pos.y+self.basisVecs[11], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[12], self.basisVecs[13], 0.))
+			pos.x+self.basisVecs[12], pos.y+self.basisVecs[13], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[14], self.basisVecs[15], 0.))
+			pos.x+self.basisVecs[14], pos.y+self.basisVecs[15], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[16], self.basisVecs[17], 0.))
+			pos.x+self.basisVecs[16], pos.y+self.basisVecs[17], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[18], self.basisVecs[19], 0.))
+			pos.x+self.basisVecs[18], pos.y+self.basisVecs[19], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[20], self.basisVecs[21], 0.))
+			pos.x+self.basisVecs[20], pos.y+self.basisVecs[21], 0.))
 		vertexValues.extend(struct.pack(
 			'3f',
-			self.basisVecs[22], self.basisVecs[23], 0.))
+			pos.x+self.basisVecs[22], pos.y+self.basisVecs[23], 0.))
 		vertexValues.extend(struct.pack(
-			#'6f4B',
 			'3f',
-			pos.x - 1, pos.y, 0.,))
+			pos.x + self.basisVecs[24], pos.y + self.basisVecs[25], 0.))
 		#	col[0],col[1],col[2],255))
 		# write values to buffer via memoryview
 		positionView[:] = vertexValues
@@ -226,19 +226,20 @@ class Player():
 		floatView = memoryview(self.vertexData.modify_array(0)).cast('B').cast('f')
 		#print(floatView.itemsize)
 		# trapezoid integration
-		area: float = 0.0
-		for vertex in range(12):
-			vertex *= 3
-			vertex += 1
-			# area = d(x) * avg(y), i.e. (x1 - x2) * (y1 + y2) / 2
-			area += (floatView[(vertex+3)%36] - floatView[vertex]) * ((floatView[(vertex+4)%36] + floatView[vertex+1])/2.)
-		volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
+		# area: float = 0.0
+		# for vertex in range(12):
+		# 	vertex *= 3
+		# 	vertex += 1
+		# 	# area = d(x) * avg(y), i.e. (x1 - x2) * (y1 + y2) / 2
+		# 	area += (floatView[(vertex+3)%36] - floatView[vertex]) * ((floatView[(vertex+4)%36] + floatView[vertex+1])/2.)
+		# volumeScale: float = volumeScaleFactor * (3.1415926535 - area) # area of a circle of radius 1 is pi
 		#volumeScale: float = 1.0
 		# force calculation
 		for vertex in range(12):
-			basis: Vec2 = Vec2(self.basisVecs[vertex],self.basisVecs[vertex+1])
 			vel: Vec2 = self.velocities[vertex]
+			dt: float = globalClock.getDt()
 			vertex += 1
+			basis: Vec2 = Vec2(self.basisVecs[vertex*2],self.basisVecs[vertex*2+1])
 			vertex *= 3
 
 			pos: Vec2 = Vec2(floatView[vertex], floatView[vertex+1])
@@ -257,46 +258,46 @@ class Player():
 			#centrepointForce: Vec2 = basis * centrepointForceMag
 			print("force from centrepoint: " + str(centrepointForce))
 
-			#midNeighbour1: Vec2 = np.divide(2., pos + neighbour1)
-			diffNeighbour1: Vec2 = neighbour1 - pos
-			distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
-			neighbour1Force: Vec2 = diffNeighbour1.normalized() * (distBetweenEdgepoints - np.absolute(distNeighbour1))
-			if (np.absolute(neighbour1Force.x)+np.absolute(neighbour1Force.y)) < epsilon: neighbour1Force = Vec2(0.,0.)
-			print("force from neighbour1: " + str(neighbour1Force))
+			# #midNeighbour1: Vec2 = np.divide(2., pos + neighbour1)
+			# diffNeighbour1: Vec2 = neighbour1 - pos
+			# distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
+			# neighbour1Force: Vec2 = diffNeighbour1.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour1))
+			# if (np.absolute(neighbour1Force.x)+np.absolute(neighbour1Force.y)) < epsilon: neighbour1Force = Vec2(0.,0.)
+			# print("force from neighbour1: " + str(neighbour1Force))
 
-			#midNeighbour2: Vec2 = np.divide(2., pos + neighbour2)
-			diffNeighbour2: Vec2 = neighbour2 - pos
-			distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
-			neighbour2Force: Vec2 = diffNeighbour2.normalized() * (distBetweenEdgepoints - np.absolute(distNeighbour2))
-			if (np.absolute(neighbour2Force.x)+np.absolute(neighbour2Force.y)) < epsilon: neighbour2Force = Vec2(0.,0.)
-			#print("diffNeighbour2: " + str(diffNeighbour2))
-			#print("normalised diffNeighbour2: " + str(diffNeighbour2.normalized()))
-			print("force from neighbour2: " + str(neighbour2Force))
+			# #midNeighbour2: Vec2 = np.divide(2., pos + neighbour2)
+			# diffNeighbour2: Vec2 = neighbour2 - pos
+			# distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
+			# neighbour2Force: Vec2 = diffNeighbour2.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour2))
+			# if (np.absolute(neighbour2Force.x)+np.absolute(neighbour2Force.y)) < epsilon: neighbour2Force = Vec2(0.,0.)
+			# #print("diffNeighbour2: " + str(diffNeighbour2))
+			# #print("normalised diffNeighbour2: " + str(diffNeighbour2.normalized()))
+			# print("force from neighbour2: " + str(neighbour2Force))
 
-			#sumForce: Vec2 = Vec2((centrepointForce.getX() + neighbour1Force.getX() + neighbour2Force.getX()) / 3.,
-			#						(centrepointForce.getY() + neighbour1Force.getY() + neighbour2Force.getY()) / 3.)
-			sumForce: Vec2 = neighbour1Force - neighbour2Force
-			print(">>> total force vector: " + str(sumForce))
-			print(">>> total force components: [x: " + str(sumForce[0]) + ", y: " + str(sumForce[1]) + "]")
-			if np.isnan(sumForce[0]): sumForce[0] = 0.
-			if np.isnan(sumForce[1]): sumForce[1] = 0.
-			averageForce: float = sumForce[0] * sumForce[0] + sumForce[1] * sumForce[1]
-			print("average force: " + str(averageForce))
-			avgMagnitude: float = np.sqrt(averageForce)
-			print("average force magnitude: " + str(avgMagnitude))
-			sprungPos, vel = calcDampedSHM(pos,vel,centrepoint-(directionCentrepoint*radius),globalClock.getDt(),2.)
+			# #sumForce: Vec2 = Vec2((centrepointForce.getX() + neighbour1Force.getX() + neighbour2Force.getX()) / 3.,
+			# #						(centrepointForce.getY() + neighbour1Force.getY() + neighbour2Force.getY()) / 3.)
+			# sumForce: Vec2 = neighbour1Force - neighbour2Force
+			# print(">>> total force vector: " + str(sumForce))
+			# print(">>> total force components: [x: " + str(sumForce[0]) + ", y: " + str(sumForce[1]) + "]")
+			# if np.isnan(sumForce[0]): sumForce[0] = 0.
+			# if np.isnan(sumForce[1]): sumForce[1] = 0.
+			# averageForce: float = sumForce[0] * sumForce[0] + sumForce[1] * sumForce[1]
+			# print("average force: " + str(averageForce))
+			# avgMagnitude: float = np.sqrt(averageForce)
+			# print("average force magnitude: " + str(avgMagnitude))
+			sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+basis*self.size,dt,10.)
 			#sprungPos, vel = calcDampedSHM(pos,vel,(basis),globalClock.getDt(),2.)
 			#sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+(directionCentrepoint*radius),1/120,1.)
 			#pos: Vec3 = Vec3(pos.x,pos.y,0.)
-			pos = sprungPos# + vel
-			pos += sumForce
+			pos = sprungPos + vel*dt
+			#pos += sumForce
 			self.velocities[int(vertex/3-1)] = vel
 			print(">>>>>NEW POSITION: " + str(pos))
 			print(">>>>>NEW VELOCITY: " + str(vel))
 			print("=====")
 
 			assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
-			assert not np.isnan(pos.y), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
+			assert not np.isnan(pos.y), f'Y POSITION IS NAN; SEGFAULT MAY OCCUR'
 			floatView[vertex]   = pos.x if not np.isnan(pos.x) else 0
 			floatView[vertex+1] = pos.y if not np.isnan(pos.y) else 0
 			floatView[vertex+2] = 0. # pos.z
