@@ -118,7 +118,7 @@ def calcDampedSHM(pos,vel,equilibriumPos,deltaTime,angularFreq):
 class Player():
 	def __init__(self, name: str, pos: Vec2, col: tuple) -> None:
 		self.pos: Vec2 = pos
-		self.size: float = 5.
+		self.size: float = 1.
 		self.vertexData = GeomVertexData(name+'-verts', vertexFormat, Geom.UHStatic)
 		self.vertexData.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
@@ -248,36 +248,36 @@ class Player():
 			neighbour2: Vec2 = Vec2(floatView[(vertex+3)%39],floatView[(vertex+4)%39])
 
 			#midCentrepoint: Vec2 = np.divide(2., pos+centrepoint)
-			diffCentrepoint: Vec2 = centrepoint - pos
-			distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y)
-			print("distance to centrepoint: " + str(distCentrepoint))
-			centrepointForceMag: float = np.absolute(radius - np.absolute(distCentrepoint))
-			directionCentrepoint: Vec2 = diffCentrepoint.normalized()
-			print("direction to centrepoint: " + str(directionCentrepoint))
-			centrepointForce: Vec2 = directionCentrepoint.normalized() * centrepointForceMag
-			#centrepointForce: Vec2 = basis * centrepointForceMag
-			print("force from centrepoint: " + str(centrepointForce))
+			# diffCentrepoint: Vec2 = centrepoint - pos
+			# distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y)
+			# print("distance to centrepoint: " + str(distCentrepoint))
+			# centrepointForceMag: float = np.absolute(radius*self.size - np.absolute(distCentrepoint))
+			# directionCentrepoint: Vec2 = diffCentrepoint.normalized()
+			# print("direction to centrepoint: " + str(directionCentrepoint))
+			# centrepointForce: Vec2 = directionCentrepoint.normalized() * centrepointForceMag
+			# #centrepointForce: Vec2 = basis * centrepointForceMag
+			# print("force from centrepoint: " + str(centrepointForce))
 
-			# #midNeighbour1: Vec2 = np.divide(2., pos + neighbour1)
-			# diffNeighbour1: Vec2 = neighbour1 - pos
-			# distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
-			# neighbour1Force: Vec2 = diffNeighbour1.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour1))
-			# if (np.absolute(neighbour1Force.x)+np.absolute(neighbour1Force.y)) < epsilon: neighbour1Force = Vec2(0.,0.)
-			# print("force from neighbour1: " + str(neighbour1Force))
+			#midNeighbour1: Vec2 = np.divide(2., pos + neighbour1)
+			diffNeighbour1: Vec2 = neighbour1 - pos
+			distNeighbour1: float = np.sqrt(diffNeighbour1.x*diffNeighbour1.x + diffNeighbour1.y*diffNeighbour1.y)
+			neighbour1Force: Vec2 = diffNeighbour1.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour1))
+			if (np.absolute(neighbour1Force.x)+np.absolute(neighbour1Force.y)) < epsilon: neighbour1Force = Vec2(0.,0.)
+			print("force from neighbour1: " + str(neighbour1Force))
 
-			# #midNeighbour2: Vec2 = np.divide(2., pos + neighbour2)
-			# diffNeighbour2: Vec2 = neighbour2 - pos
-			# distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
-			# neighbour2Force: Vec2 = diffNeighbour2.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour2))
-			# if (np.absolute(neighbour2Force.x)+np.absolute(neighbour2Force.y)) < epsilon: neighbour2Force = Vec2(0.,0.)
-			# #print("diffNeighbour2: " + str(diffNeighbour2))
-			# #print("normalised diffNeighbour2: " + str(diffNeighbour2.normalized()))
-			# print("force from neighbour2: " + str(neighbour2Force))
+			#midNeighbour2: Vec2 = np.divide(2., pos + neighbour2)
+			diffNeighbour2: Vec2 = neighbour2 - pos
+			distNeighbour2: float = np.sqrt(diffNeighbour2.x*diffNeighbour2.x + diffNeighbour2.y*diffNeighbour2.y)
+			neighbour2Force: Vec2 = diffNeighbour2.normalized() * np.absolute(distBetweenEdgepoints - np.absolute(distNeighbour2))
+			if (np.absolute(neighbour2Force.x)+np.absolute(neighbour2Force.y)) < epsilon: neighbour2Force = Vec2(0.,0.)
+			#print("diffNeighbour2: " + str(diffNeighbour2))
+			#print("normalised diffNeighbour2: " + str(diffNeighbour2.normalized()))
+			print("force from neighbour2: " + str(neighbour2Force))
 
 			# #sumForce: Vec2 = Vec2((centrepointForce.getX() + neighbour1Force.getX() + neighbour2Force.getX()) / 3.,
 			# #						(centrepointForce.getY() + neighbour1Force.getY() + neighbour2Force.getY()) / 3.)
-			# sumForce: Vec2 = neighbour1Force - neighbour2Force
-			# print(">>> total force vector: " + str(sumForce))
+			sumForce: Vec2 = neighbour1Force - neighbour2Force
+			print(">>> total force vector: " + str(sumForce))
 			# print(">>> total force components: [x: " + str(sumForce[0]) + ", y: " + str(sumForce[1]) + "]")
 			# if np.isnan(sumForce[0]): sumForce[0] = 0.
 			# if np.isnan(sumForce[1]): sumForce[1] = 0.
@@ -285,12 +285,13 @@ class Player():
 			# print("average force: " + str(averageForce))
 			# avgMagnitude: float = np.sqrt(averageForce)
 			# print("average force magnitude: " + str(avgMagnitude))
+
+			pos += sumForce
 			sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+basis*self.size,dt,10.)
 			#sprungPos, vel = calcDampedSHM(pos,vel,(basis),globalClock.getDt(),2.)
 			#sprungPos, vel = calcDampedSHM(pos,vel,centrepoint+(directionCentrepoint*radius),1/120,1.)
 			#pos: Vec3 = Vec3(pos.x,pos.y,0.)
 			pos = sprungPos + vel*dt
-			#pos += sumForce
 			self.velocities[int(vertex/3-1)] = vel
 			print(">>>>>NEW POSITION: " + str(pos))
 			print(">>>>>NEW VELOCITY: " + str(vel))
@@ -331,6 +332,18 @@ class Player():
 			floatView[1] = ypos - .05
 			return 1
 		else: return 0
+
+	def pointToBoundary(self, point: Vec2):
+		# move a point to the boundary of the shape
+		floatView = memoryview(self.vertexData.modify_array(0)).cast('B').cast('f')
+		centrepoint: Vec2 = Vec2(floatView[0],floatView[1])
+		diffCentrepoint: Vec2 = centrepoint - point
+		distCentrepoint: float = np.sqrt(diffCentrepoint.x*diffCentrepoint.x + diffCentrepoint.y*diffCentrepoint.y)
+		return radius*self.size - distCentrepoint
+
+	def isPointInside(self, point: Vec2):
+		# test if the point is bounded by the vertices		
+		return (self.pointToBoundary(point) > 0)
 
 #def move_p1_left():
 #	p1.pos -= (1,0,0)
