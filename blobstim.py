@@ -262,15 +262,15 @@ class Ball:
         model.set_scale(.1)
         self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
         model.reparent_to(self.nodepath)
-        self.nodepath.set_pos(self.blob.pos + Vec3(0,0,1))
+        self.nodepath.set_pos(self.blob.pos + Vec3(0,0,.2))
 
         base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
 
     def update(self, task):
-        self.velocity -= Vec3(0,0,.01)                                    # gravity
+        self.velocity -= Vec3(0,0,.1) * globalClock.getDt()             # gravity
         pos = self.nodepath.get_pos()                                     # current ball position
         if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
-            self.velocity = -(self.velocity * .95)
+            self.velocity = -self.velocity
             self.bong.play()
         self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
         return task.cont       
