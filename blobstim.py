@@ -62,10 +62,13 @@ def GEN_PRIMS_FORMAT():
 
 # construct bong
 atk: np.array = np.linspace(0,1,400, dtype=np.float32)                # ascending attack
-dec: np.array = np.linspace(1,0,15000 - len(atk), dtype=np.float32)   # descending decay
+dec: np.array = np.linspace(1,0,48000 - len(atk), dtype=np.float32)   # descending decay
 env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
 # freq is 400hz because sample length is 1/80s
-BONG_SAMPLE   = np.array(np.sin(2*np.pi * 5 * np.linspace(0,1,15000,endpoint=False)) * env * 32767, dtype=np.int16)
+BONG_SAMPLE   = np.array(np.sin(2*np.pi * 5 * np.linspace(0,1,48000,endpoint=False)) * env * 2048, dtype=np.int16)
+bong_audio_buff = UserDataAudio(48000,1,False)
+bong_audio_buff.append(BONG_SAMPLE.tobytes())
+bong_audio_buff.done()
 
 #BONG_SRC = Source(Buffer([AL_FORMAT_MONO16, sample.tolist(), len(sample), 48000]))
 
@@ -247,13 +250,12 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, blob: Blob):
+    def __init__(self, blob: Blob, bong):
         self.blob: Blob = blob
         self.bounce: float = 0.
         self.radius: float = .15
         self.velocity: Vec3 = Vec3(0,0,0)
-        self.audio_buff = UserDataAudio(48000,1,True)
-        self.audio_buff_cursor = self.audio_buff.open()
+        self.bong = bong
 
         model = base.loader.load_model("sphere.egg")
         model.set_color(Vec4(self.blob.col, 1))
@@ -269,7 +271,7 @@ class Ball:
         pos = self.nodepath.get_pos()                                     # current ball position
         if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
             self.velocity = -(self.velocity * .95)
-            self.audio_buff.append(BONG_SAMPLE.tobytes())
+            self.bong.play()
         self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
         return task.cont       
 
@@ -281,6 +283,8 @@ if __name__ == "__main__":
     render.setAntialias(AntialiasAttrib.MAuto)      # set global antialiasing
 
     base.set_background_color(0,0,0,1)              # dark background
+
+    bong_smp = loader.loadSfx(bong_audio_buff)
 
     big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
     big_light_np.node().setShadowCaster(True, 512, 512)
@@ -308,7 +312,7 @@ if __name__ == "__main__":
     base.accept("s", p1.move, ["back"])
     base.accept("s-repeat", p1.move, ["back"])
 
-    ball1 = Ball(p1)                                # give each blob a bouncing ball
+    ball1 = Ball(p1, bong_smp)                                # give each blob a bouncing ball
 
     # make each blob bong at a different frequency when the ball bounces
 
