@@ -1,8 +1,8 @@
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
-    loadPrcFileData, Vec2, Vec3,
+    loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
-    GeomVertexData, Geom, GeomNode
+    GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib
 )
 import numpy as np
 import struct
@@ -35,6 +35,8 @@ show-frame-rate-meter 1
 hardware-animated-vertices true
 framebuffer-srgb true
 basic-shaders-only false
+framebuffer-multisample 1
+multisamples 2
 //threading-model Cull/Draw
 """
 loadPrcFileData("", CONFIG)
@@ -57,6 +59,15 @@ def GEN_PRIMS_FORMAT():
     vtx_format.add_array(arrayFormat)
     vtx_format = GeomVertexFormat.register_format(vtx_format)
     return blobPrim, vtx_format
+
+# construct bong
+atk: np.array = np.linspace(0,1,400, dtype=np.float32)                # ascending attack
+dec: np.array = np.linspace(1,0,15000 - len(atk), dtype=np.float32)   # descending decay
+env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
+# freq is 400hz because sample length is 1/80s
+BONG_SAMPLE   = np.array(np.sin(2*np.pi * 5 * np.linspace(0,1,15000,endpoint=False)) * env * 32767, dtype=np.int16)
+
+#BONG_SRC = Source(Buffer([AL_FORMAT_MONO16, sample.tolist(), len(sample), 48000]))
 
 def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFreq: float):
     assert (angularFreq >= 0.), f'SHM angular frequency parameter must be positive!'
@@ -130,7 +141,10 @@ def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFre
 
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: tuple) -> None:
+        # TODO move data into C++ obj tags or VBO
+        self.name = name
         self.pos: Vec2    = pos
+        self.col: tuple   = col
         self.size: float  = 1.
         self.verts: int   = 12
         prims, vtx_format = GEN_PRIMS_FORMAT()
@@ -168,6 +182,8 @@ class Blob:
 
         # create a new node and attach to base.render
         self.nodepath = base.render.attach_new_node(self.geom_node)
+        # give the blob a depth offset to prevent self-shadowing etc
+        self.nodepath.setDepthOffset(1)
 
         # start at rest
         self.velocities: list[Vec2] = [Vec2(0.,0.) for _ in range(12)]
@@ -204,16 +220,95 @@ class Blob:
             vtx_view_f32[vtx+2] = 0. # pos.z
         return task.cont
 
+    def move(self, direction) -> bool:
+        #print(self.view[1].to_bytes())
+        vtx_view_f32 = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
+        if direction == "left":
+            # go left
+            vtx_view_f32[0] -= .05
+            self.pos.x -= .05
+            return 1
+        elif direction == "right":
+            # go right
+            vtx_view_f32[0] += .05
+            self.pos.x += .05
+            return 1
+        elif direction == "fwd":
+            # go forwards
+            vtx_view_f32[1] += .05
+            self.pos.y += .05
+            return 1
+        elif direction == "back":
+            # ...you guessed it
+            vtx_view_f32[1] -= .05
+            self.pos.y -= .05
+            return 1
+        else: return 0
+
+
+class Ball:
+    def __init__(self, blob: Blob):
+        self.blob: Blob = blob
+        self.bounce: float = 0.
+        self.radius: float = .15
+        self.velocity: Vec3 = Vec3(0,0,0)
+        self.audio_buff = UserDataAudio(48000,1,True)
+        self.audio_buff_cursor = self.audio_buff.open()
+
+        model = base.loader.load_model("sphere.egg")
+        model.set_color(Vec4(self.blob.col, 1))
+        model.set_scale(.1)
+        self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
+        model.reparent_to(self.nodepath)
+        self.nodepath.set_pos(self.blob.pos + Vec3(0,0,1))
+
+        base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
+
+    def update(self, task):
+        self.velocity -= Vec3(0,0,.01)                                    # gravity
+        pos = self.nodepath.get_pos()                                     # current ball position
+        if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
+            self.velocity = -(self.velocity * .95)
+            self.audio_buff.append(BONG_SAMPLE.tobytes())
+        self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
+        return task.cont       
+
 
 if __name__ == "__main__":
     print("="*20 + " Welcome to blobstim:) " + 20*"=")
     ShowBase()                                      # Showbase initialised
+    render.setShaderAuto()                          # auto shaders for shadow and glow mapping
+    render.setAntialias(AntialiasAttrib.MAuto)      # set global antialiasing
 
-    base.set_background_color(0,0,0,1)
+    base.set_background_color(0,0,0,1)              # dark background
 
-    p1 = Blob("p1",Vec3(0.,-5.,0.),[0,0,255])       # create a test blob
+    big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
+    big_light_np.node().setShadowCaster(True, 512, 512)
+    big_light_np.set_color(1,.9,.78)
+    big_light_np.setHpr(20, -80, 0)
+    render.setLight(big_light_np)                   # set a warm directional light on the whole scene
 
-    # give each blob a bouncing ball
+    p1 = Blob("p1",Vec3(0.,-5.,0.),(0,0,255))       # create a test blob
+
+    # awsd/keypad movement for p1 blob
+    base.accept("arrow_left", p1.move, ["left"])
+    base.accept("arrow_left-repeat", p1.move, ["left"])
+    base.accept("a", p1.move, ["left"])
+    base.accept("a-repeat", p1.move, ["left"])
+    base.accept("arrow_right", p1.move, ["right"])
+    base.accept("arrow_right-repeat", p1.move, ["right"])
+    base.accept("d", p1.move, ["right"])
+    base.accept("d-repeat", p1.move, ["right"])
+    base.accept("arrow_up", p1.move, ["fwd"])
+    base.accept("arrow_up-repeat", p1.move, ["fwd"])
+    base.accept("w", p1.move, ["fwd"])
+    base.accept("w-repeat", p1.move, ["fwd"])
+    base.accept("arrow_down", p1.move, ["back"])
+    base.accept("arrow_down-repeat", p1.move, ["back"])
+    base.accept("s", p1.move, ["back"])
+    base.accept("s-repeat", p1.move, ["back"])
+
+    ball1 = Ball(p1)                                # give each blob a bouncing ball
 
     # make each blob bong at a different frequency when the ball bounces
 
@@ -225,3 +320,4 @@ if __name__ == "__main__":
     base.cam.setHpr(0,-15,0)
 
     base.run()                                      # taskMgr blocks
+    oalQuit()                                  # close audio stream
