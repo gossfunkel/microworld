@@ -62,10 +62,10 @@ def GEN_PRIMS_FORMAT():
 
 # construct bong
 atk: np.array = np.linspace(0,1,400, dtype=np.float32)                # ascending attack
-dec: np.array = np.linspace(1,0,48000 - len(atk), dtype=np.float32)   # descending decay
+dec: np.array = np.linspace(1,0,6000 - len(atk), dtype=np.float32)   # descending decay
 env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
 # freq is 400hz because sample length is 1/80s
-BONG_SAMPLE   = np.array(np.sin(2*np.pi * 5 * np.linspace(0,1,48000,endpoint=False)) * env * 2048, dtype=np.int16)
+BONG_SAMPLE   = np.array(np.sin(TAU * 50 * np.linspace(0,1,6000,endpoint=False)) * env * 32767, dtype=np.int16)
 bong_audio_buff = UserDataAudio(48000,1,False)
 bong_audio_buff.append(BONG_SAMPLE.tobytes())
 bong_audio_buff.done()
