@@ -208,9 +208,11 @@ class Blob:
         #self.nodepath.setShaderAuto()
 
         # now set up accessories
-        self.bong         = make_bong(bong_freq)
+        self.bong           = make_bong(bong_freq)          # generate sound effect at given freq
         ball_tex = loader.loadTexture("teal.png")
-        self.balls        = [Ball(self, ball_tex)]                   # give each blob a floating ball
+        self.balls          = [Ball(self, ball_tex)]        # array for balls on blob
+        self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
+        self.num_balls: int = len(self.balls)               # to help with angle calculations
 
         # start at rest
         self.velocities: list[Vec2] = [Vec2(0.,0.) for _ in range(12)]
@@ -225,22 +227,24 @@ class Blob:
 
     def add_ball(self, ball=None, balls: int = 1):
         print(f"adding ball to {self.name}")
-        if isinstance(ball,type(None)):
+        if isinstance(ball,type(None)): # make a new ball
             ball_tex = loader.loadTexture("teal.png")
-            self.balls.append(Ball(self, ball_tex))
+            self.balls.append(Ball(self, ball_tex, index=self.num_balls))
         else:
-            self.balls.append(ball)
-            ball.blob = self
+            self.balls.append(ball)     # add ball to balls
+            ball.blob = self            # change ball references to self
+            ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
+        self.num_balls += 1
 
     def give_ball(self, blob):
-        num_balls = len(self.balls)
-        if num_balls > 0:
-            given_ball = self.balls[num_balls-1]
+        if self.num_balls > 0:
+            given_ball = self.balls[self.num_balls-1]
             self.bong.play()
             blob.add_ball(given_ball)
             self.balls.remove(given_ball)
             given_ball.fly_to_target(blob)
             print(f"{self.name} gave 1 ball to {blob.name}")
+            self.num_balls -= 1
         else: 
             print("No balls to give!")
 
@@ -270,6 +274,8 @@ class Blob:
             vtx_view_f32[vtx]   = pos.x if not np.isnan(pos.x) else 0
             vtx_view_f32[vtx+1] = pos.y if not np.isnan(pos.y) else 0
             vtx_view_f32[vtx+2] = 0. # pos.z
+
+        self.spinner += (globalClock.getDt())%360
         return task.cont
 
     # move the blob by its centrepoint
@@ -298,14 +304,13 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, blob: Blob, colour_tex: Texture):
-        self.blob: Blob = blob
-        self.bounce: float = 0.
-        self.radius: float = .15
+    def __init__(self, blob: Blob | None, colour_tex: Texture, index: int | None = 0):
+        self.blob = blob            # blob that ball is attached to, if any
+        self.index = index          # helps balls rotate on the blobs neatly
+        self.radius: float = .15    # personal space
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
-        self.ticker = 0
         self.angle = 0
-        self.orbiting = True
+        self.orbiting = True if blob is not None else False
 
         model = base.loader.load_model("sphere.egg")
         ts_col = TextureStage('ts_col')
@@ -333,7 +338,8 @@ class Ball:
     def fly_to_target(self, target: Blob):
         self.orbiting = False
         # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)
-        elevation = self.radius*1.2 + .04 * np.sin(self.ticker + .5)   # this works if dt is in seconds (doubt, hahaha)
+        ratio = (self.index+1) / self.blob.num_balls
+        elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio)   # this works if dt is in seconds (doubt, hahaha)
         move_int = self.nodepath.posInterval(1., target.pos + Vec3(0,0,elevation), fluid=1)
         Sequence(
             move_int,
@@ -344,19 +350,17 @@ class Ball:
     def update(self, task):
         if (self.orbiting):
             pos = self.nodepath.get_pos()                                       # current ball position
-            # self.velocity -= Vec3(0,0,.1) * globalClock.getDt()               # gravity
-            # if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
-            #     self.velocity = -self.velocity* .979
-            # self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
-            self.ticker += globalClock.getDt()*.5
-            self.angle = self.ticker%360
-            elevation = self.radius*1.2 + .04 * np.sin(self.ticker)
-            blobpos = self.blob.pos
-            aimpos = Vec3(blobpos.x + np.cos(self.angle)/2.,
-                          blobpos.y + np.sin(self.angle)/2.,
-                          blobpos.z + elevation)
-            abs_dist: float = ABS_DIST(pos, aimpos)
-            damper = min(1, max(0, abs_dist))# 1 if far, 0 if close
+            # each ball gets a root of unity of num_balls (arrange them in an even circle)
+            ratio = (self.index + 1)/ self.blob.num_balls
+            self.angle = TAU * ratio + self.blob.spinner
+            # bob up and down
+            elevation = self.radius*1.2 + .04 * np.sin(self.angle)
+            # go round in a little circle over the blob
+            aimpos = self.blob.pos + Vec3(np.cos(self.angle)/2.,
+                                          np.sin(self.angle)/2.,
+                                          elevation)
+            abs_dist: float = ABS_DIST(pos, aimpos)     # absolute distance of that lad
+            damper = min(1, max(0, abs_dist/2))         # 1 if far, 0 if close
             self.nodepath.set_pos(pos + (aimpos-pos)*damper)
         return task.cont       
 
@@ -394,13 +398,14 @@ class GameBase(ShowBase):
         self.accept("arrow_down-repeat", self.p1.move, ["back"])
         self.accept("s", self.p1.move, ["back"])
         self.accept("s-repeat", self.p1.move, ["back"])
-
         
         self.accept("b", self.p1.add_ball)                  # allow player to spawn balls
         self.accept("space", self.p1.give_ball, [self.p2])  # allow player to gift balls 
 
-        self.cam.setPos(CAM_POS)                            # move camera to a better angle for us
-        self.cam.setHpr(0,-22,0)
+        self.accept("escape", self.userExit)                # quickly quit the game
+
+        self.cam.setPos(CAM_POS)                            # spawn camera distance from origin
+        self.cam.setHpr(0,-22,0)                            # look down at your blob! 
 
         filters = CommonFilters(self.win, self.cam)
         filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
@@ -419,3 +424,8 @@ if __name__ == "__main__":
     # simplepbr.init(use_330=True)
 
     base.run()                                      # taskMgr blocks
+
+# self.velocity -= Vec3(0,0,.1) * globalClock.getDt()               # gravity
+# if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
+#     self.velocity = -self.velocity* .979
+# self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
