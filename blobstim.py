@@ -61,16 +61,17 @@ def GEN_PRIMS_FORMAT():
     return blobPrim, vtx_format
 
 # construct bong
-atk: np.array = np.linspace(0,1,400, dtype=np.float32)                # ascending attack
-dec: np.array = np.linspace(1,0,6000 - len(atk), dtype=np.float32)   # descending decay
-env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
-# freq is 400hz because sample length is 1/80s
-BONG_SAMPLE   = np.array(np.sin(TAU * 50 * np.linspace(0,1,6000,endpoint=False)) * env * 32767, dtype=np.int16)
-bong_audio_buff = UserDataAudio(48000,1,False)
-bong_audio_buff.append(BONG_SAMPLE.tobytes())
-bong_audio_buff.done()
-
-#BONG_SRC = Source(Buffer([AL_FORMAT_MONO16, sample.tolist(), len(sample), 48000]))
+def make_bong(freq, length=6000, atk=400):
+    freq_scale = length/48000
+    atk: np.array = np.linspace(0,1,atk, dtype=np.float32)                # ascending attack
+    dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)   # descending decay
+    env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
+    # freq is 400hz because sample length is 1/80s
+    BONG_SAMPLE   = np.array(np.sin(TAU * freq_scale * freq * np.linspace(0,1,length,endpoint=False)) * env * 32767, dtype=np.int16)
+    bong_audio_buff = UserDataAudio(48000,1,False)
+    bong_audio_buff.append(BONG_SAMPLE.tobytes())
+    bong_audio_buff.done()
+    return base.loader.loadSfx(bong_audio_buff)
 
 def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFreq: float):
     assert (angularFreq >= 0.), f'SHM angular frequency parameter must be positive!'
@@ -143,13 +144,15 @@ def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFre
     return pos, vel
 
 class Blob:
-    def __init__(self, name: str, pos: Vec2, col: tuple) -> None:
+    def __init__(self, name: str, pos: Vec2, col: tuple, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
         self.name = name
         self.pos: Vec2    = pos
         self.col: tuple   = col
         self.size: float  = 1.
         self.verts: int   = 12
+        self.bong         = make_bong(bong_freq)
+        self.ball         = Ball(self)                   # give each blob a bouncing ball
         prims, vtx_format = GEN_PRIMS_FORMAT()
         self.vtx_data     = GeomVertexData(name+'-verts', vtx_format, Geom.UHStatic)
         self.vtx_data.unclean_set_num_rows(self.verts+1) # 1 row per vertex (12 rim, 1 centre)
@@ -250,27 +253,27 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, blob: Blob, bong):
+    def __init__(self, blob: Blob):
         self.blob: Blob = blob
         self.bounce: float = 0.
         self.radius: float = .15
-        self.velocity: Vec3 = Vec3(0,0,0)
-        self.bong = bong
+        self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
+        self.bong = blob.bong
 
         model = base.loader.load_model("sphere.egg")
         model.set_color(Vec4(self.blob.col, 1))
         model.set_scale(.1)
         self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
         model.reparent_to(self.nodepath)
-        self.nodepath.set_pos(self.blob.pos + Vec3(0,0,.2))
+        self.nodepath.set_pos(self.blob.pos + Vec3(0,0,.22))
 
         base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
 
     def update(self, task):
-        self.velocity -= Vec3(0,0,.1) * globalClock.getDt()             # gravity
+        self.velocity -= Vec3(0,0,.1) * globalClock.getDt()               # gravity
         pos = self.nodepath.get_pos()                                     # current ball position
         if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
-            self.velocity = -self.velocity
+            self.velocity = -self.velocity* .979
             self.bong.play()
         self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)
         return task.cont       
@@ -284,15 +287,14 @@ if __name__ == "__main__":
 
     base.set_background_color(0,0,0,1)              # dark background
 
-    bong_smp = loader.loadSfx(bong_audio_buff)
-
     big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
     big_light_np.node().setShadowCaster(True, 512, 512)
     big_light_np.set_color(1,.9,.78)
     big_light_np.setHpr(20, -80, 0)
     render.setLight(big_light_np)                   # set a warm directional light on the whole scene
 
-    p1 = Blob("p1",Vec3(0.,-5.,0.),(0,0,255))       # create a test blob
+    p1 = Blob("p1",Vec3(0.,-5.,0.),(0,0,255), 200)  # create a test blob
+    p2 = Blob("p2",Vec3(0., 5.,0.),(0,255,0), 300)  # create a second test blob
 
     # awsd/keypad movement for p1 blob
     base.accept("arrow_left", p1.move, ["left"])
@@ -311,10 +313,6 @@ if __name__ == "__main__":
     base.accept("arrow_down-repeat", p1.move, ["back"])
     base.accept("s", p1.move, ["back"])
     base.accept("s-repeat", p1.move, ["back"])
-
-    ball1 = Ball(p1, bong_smp)                                # give each blob a bouncing ball
-
-    # make each blob bong at a different frequency when the ball bounces
 
     # make the balls glowy and cool
 
