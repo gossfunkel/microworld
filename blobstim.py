@@ -164,11 +164,12 @@ class Blob:
         self.name = name
         self.pos = Vec3(pos,0)
         self.col: tuple   = col
-        self.size: float  = 2.
+        self.radius: float  = 1.
         self.verts: int   = 12
         prims, vtx_format = GEN_PRIMS_FORMAT()
         self.vtx_data     = GeomVertexData(name+'-verts', vtx_format, Geom.UHStatic)
         self.vtx_data.unclean_set_num_rows(self.verts+1) # 1 row per vertex (12 rim, 1 centre)
+        self.colliding    = False
 
         # open memoryviews to write position, normal, and colour data to VBO
         pos_view  = memoryview(self.vtx_data.modify_array(0)).cast('B')
@@ -180,7 +181,7 @@ class Blob:
             # generate circular layout with basis vectors
             vtx_vals.extend(struct.pack(
                 '3f',
-                pos.x+BASIS_VECS[i], pos.y+BASIS_VECS[i+1], 0.))
+                pos.x+BASIS_VECS[i]*self.radius, pos.y+BASIS_VECS[i+1]*self.radius, 0.))
         # pack values into memoryview
         pos_view[:] = vtx_vals
 
@@ -201,7 +202,7 @@ class Blob:
 
         # create a new node and attach to base.render
         self.nodepath = base.render.attach_new_node(self.geom_node)
-        # store position in the node FIXME currently nodepath pos must stay at 0,0,0 for the world matrix
+        # store position in the node FIXME currently nodepath pos must stay at origin for the world matrix
         #self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
         self.nodepath.setDepthOffset(1)
@@ -210,7 +211,7 @@ class Blob:
         # now set up accessories
         self.bong           = make_bong(bong_freq)          # generate sound effect at given freq
         ball_tex = loader.loadTexture("teal.png")
-        self.balls          = [Ball(self, ball_tex)]        # array for balls on blob
+        self.balls          = []                            # array for balls on blob
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
 
@@ -229,11 +230,12 @@ class Blob:
         print(f"adding ball to {self.name}")
         if isinstance(ball,type(None)): # make a new ball
             ball_tex = loader.loadTexture("teal.png")
-            self.balls.append(Ball(self, ball_tex, index=self.num_balls))
+            self.balls.append(Ball(ball_tex, blob=self, index=self.num_balls))
         else:
             self.balls.append(ball)     # add ball to balls
             ball.blob = self            # change ball references to self
             ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
+            ball.set_orbiting_true()
         self.num_balls += 1
 
     def give_ball(self, blob):
@@ -252,6 +254,16 @@ class Blob:
         # TODO move the procedural animation to a vertex shader (collisions??)
         vtx_view_f32 = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
 
+        # the vertex at the centre of the blob
+        centrepoint: Vec2 = Vec2(vtx_view_f32[0],vtx_view_f32[1])
+
+        # naive collision check with items
+        for item in base.floating_items:
+            if ABS_DIST(Vec3(centrepoint.xy, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
+                self.add_ball(item)
+                base.floating_items.remove(item)
+                self.bong.play()
+
         # calculate internal blob forces
         for vtx in range(12):
             vel: Vec2 = self.velocities[vtx]
@@ -261,13 +273,14 @@ class Blob:
             vtx *= 3
 
             pos: Vec2 = Vec2(vtx_view_f32[vtx], vtx_view_f32[vtx+1])
-            centrepoint: Vec2 = Vec2(vtx_view_f32[0],vtx_view_f32[1])
 
-            sprungPos, vel = SHO(pos,vel,centrepoint+basis*self.size,dt,10.)
+            sprungPos, vel = SHO(pos,vel,centrepoint+basis*self.radius,dt,10.)
             pos = sprungPos + vel*dt
             self.velocities[int(vtx/3-1)] = vel
 
             # TODO modify movement based on collisions
+            if self.colliding:
+                pos = pos - coll_pos
 
             assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
             assert not np.isnan(pos.y), f'Y POSITION IS NAN; SEGFAULT MAY OCCUR'
@@ -304,7 +317,7 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, blob: Blob | None, colour_tex: Texture, index: int | None = 0):
+    def __init__(self, colour_tex: Texture, pos: Vec3 | None = None, blob: Blob | None = None, index: int | None = 0):
         self.blob = blob            # blob that ball is attached to, if any
         self.index = index          # helps balls rotate on the blobs neatly
         self.radius: float = .15    # personal space
@@ -313,24 +326,29 @@ class Ball:
         self.orbiting = True if blob is not None else False
 
         model = base.loader.load_model("sphere.egg")
-        ts_col = TextureStage('ts_col')
-        white_tex = loader.loadTexture("white65.png")
-        model.setTexture(ts_col, white_tex)
         model.setTransparency(1)
+        ts_col = TextureStage('ts_col')
+        model.setTexture(ts_col, colour_tex)
         # model.set_color(Vec4(self.blob.col, 1))
         ts_glow = TextureStage('ts_glow')
         ts_glow.setMode(TextureStage.MGlow)
-        # black_tex = loader.loadTexture("black.png")
-        model.setTexture(ts_glow, colour_tex)
+        black_tex = loader.loadTexture("black.png")
+        model.setTexture(ts_glow, black_tex)
         model.set_scale(.06)
-        self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
-        model.reparent_to(self.nodepath)
-        self.nodepath.set_pos(self.blob.pos + Vec3(.5,0,.22)) # adjustments for oscillations
-        #self.nodepath.setShaderAuto()
+        if self.blob is None:
+            assert pos is not None, f"A free ball must have a position!"
+            self.nodepath = base.render.attach_new_node(f"ball_floating")
+            model.reparent_to(self.nodepath)
+            self.nodepath.set_pos(pos)                            # use given position
+            base.taskMgr.add(self.update, f"update_ball_fl")
+        else:
+            self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
+            model.reparent_to(self.nodepath)
+            self.nodepath.set_pos(self.blob.pos + Vec3(.5,0,.22)) # adjustments for oscillations
+            base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
+        
+            self.blob.bong.play()
 
-        self.blob.bong.play()
-
-        base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
 
     def set_orbiting_true(self):
         self.orbiting = True
@@ -348,8 +366,8 @@ class Ball:
         ).start()
 
     def update(self, task):
+        pos = self.nodepath.get_pos()                               # current ball position
         if (self.orbiting):
-            pos = self.nodepath.get_pos()                                       # current ball position
             # each ball gets a root of unity of num_balls (arrange them in an even circle)
             ratio = (self.index + 1)/ self.blob.num_balls
             self.angle = TAU * ratio + self.blob.spinner
@@ -359,27 +377,32 @@ class Ball:
             aimpos = self.blob.pos + Vec3(np.cos(self.angle)/2.,
                                           np.sin(self.angle)/2.,
                                           elevation)
-            abs_dist: float = ABS_DIST(pos, aimpos)     # absolute distance of that lad
-            damper = min(1, max(0, abs_dist/2))         # 1 if far, 0 if close
+            abs_dist: float = ABS_DIST(pos, aimpos)                 # absolute distance of that lad
+            damper = min(1, max(0, abs_dist/2))                     # 1 if far, 0 if close
             self.nodepath.set_pos(pos + (aimpos-pos)*damper)
+        else:
+            self.nodepath.set_pos(pos.x,pos.y,0+np.sin(globalClock.getDt())*.1)
         return task.cont       
 
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
-        self.set_background_color(0,0,0,1)              # dark background
+        self.set_background_color(0,0,0,1)                # dark background
 
-        render.setAntialias(AntialiasAttrib.MAuto)      # set global antialiasing
+        render.setAntialias(AntialiasAttrib.MAuto)        # set global antialiasing
         render.setShaderAuto()
 
         big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
         big_light_np.node().setShadowCaster(True, 512, 512)
         big_light_np.set_color(.5,.45,.39)
         big_light_np.setHpr(20, -80, 0)
-        render.setLight(big_light_np)                   # set a warm directional light on the whole scene
+        render.setLight(big_light_np)                     # set a warm directional light on the whole scene
 
         self.p1 = Blob("p1",Vec2(0.,-5.),(0,0,255), 200)  # create a test blob
         self.p2 = Blob("p2",Vec2(0., 5.),(0,255,0), 300)  # create a second test blob
+
+        # TODO: Nodepath or spacial partitioning
+        self.floating_items = []                          # big list of all nearby collectable items
 
         # awsd/keypad movement for p1 blob
         self.accept("arrow_left", self.p1.move, ["left"])
@@ -407,11 +430,14 @@ class GameBase(ShowBase):
         self.cam.setPos(CAM_POS)                            # spawn camera distance from origin
         self.cam.setHpr(0,-22,0)                            # look down at your blob! 
 
-        filters = CommonFilters(self.win, self.cam)
+        filters = CommonFilters(self.win, self.cam)         # bloom/glow
         filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
 
         self.taskMgr.add(self.update_cam, "update_cam")
+        # TODO spacial partitioning
+        # self.taskMgr.add(self.update_space, "update_space")
 
+    # camera follows p1
     def update_cam(self, task):
         self.cam.setPos(self.p1.pos + CAM_POS)
         # print(f"blobpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
@@ -422,6 +448,12 @@ if __name__ == "__main__":
     base = GameBase()                               # Showbase initialised
 
     # simplepbr.init(use_330=True)
+
+    test_ball_pos_1 = Vec3(-4,0,0)
+    test_ball_pos_2 = Vec3(3,-2,0)
+    test_ball_tex = base.loader.loadTexture("green.png")
+    base.floating_items.append(Ball(test_ball_tex, pos=test_ball_pos_1))
+    base.floating_items.append(Ball(test_ball_tex, pos=test_ball_pos_2))
 
     base.run()                                      # taskMgr blocks
 
