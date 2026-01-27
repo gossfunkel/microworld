@@ -5,7 +5,7 @@ from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
     GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture
+    TextureStage, Texture, TextNode
 )
 import numpy as np
 import struct
@@ -401,6 +401,29 @@ class GameBase(ShowBase):
         self.p1 = Blob("p1",Vec2(0.,-5.),(0,0,255), 200)  # create a test blob
         self.p2 = Blob("p2",Vec2(0., 5.),(0,255,0), 300)  # create a second test blob
 
+        self.p1_label = TextNode("p1 balls: ")
+        self.p1_label.setTextColor(1,1,1,1)
+        self.p1_label.setTextScale(0.1)
+        p1_label_np = aspect2d.attach_new_node(self.p1_label)
+        p1_label_np.set_pos((1.,0.,.85))
+        self.p1_label_v = TextNode("0")
+        self.p1_label_v.setTextColor(1,1,1,1)
+        self.p1_label_v.setTextScale(0.1)
+        p1_label_v_np = aspect2d.attach_new_node(self.p1_label_v)
+        p1_label_v_np.set_pos((1.3,0.,.85))
+        # self.p1_label.set_transparency(1)
+        self.p2_label = TextNode("p2 balls: ")
+        self.p2_label.setTextColor(1,1,1,1)
+        self.p2_label.setTextScale(0.1)
+        p2_label_np = aspect2d.attach_new_node(self.p2_label)
+        p2_label_np.set_pos((1.,0.,.7))
+        self.p2_label_v = TextNode("0")
+        self.p2_label_v.setTextColor(1,1,1,1)
+        self.p2_label_v.setTextScale(0.1)
+        p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
+        p2_label_v_np.set_pos((1.3,0.,.7))
+        # self.p2_label.set_transparency(1)
+
         # TODO: Nodepath or spacial partitioning
         self.floating_items = []                          # big list of all nearby collectable items
 
@@ -433,14 +456,18 @@ class GameBase(ShowBase):
         filters = CommonFilters(self.win, self.cam)         # bloom/glow
         filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
 
-        self.taskMgr.add(self.update_cam, "update_cam")
+        self.taskMgr.add(self.update, "update")
         # TODO spacial partitioning
         # self.taskMgr.add(self.update_space, "update_space")
 
     # camera follows p1
-    def update_cam(self, task):
+    def update(self, task):
         self.cam.setPos(self.p1.pos + CAM_POS)
         # print(f"blobpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
+
+        # update UI
+        self.p1_label_v.setText(str(self.p1.num_balls))
+        self.p2_label_v.setText(str(self.p2.num_balls))
         return task.cont
 
 if __name__ == "__main__":
@@ -449,11 +476,14 @@ if __name__ == "__main__":
 
     # simplepbr.init(use_330=True)
 
-    test_ball_pos_1 = Vec3(-4,0,0)
-    test_ball_pos_2 = Vec3(3,-2,0)
-    test_ball_tex = base.loader.loadTexture("green.png")
-    base.floating_items.append(Ball(test_ball_tex, pos=test_ball_pos_1))
-    base.floating_items.append(Ball(test_ball_tex, pos=test_ball_pos_2))
+    hp_ball_pos_1 = Vec3(-4,0,0)
+    hp_ball_pos_2 = Vec3(3,-2,0)
+    hp_ball_tex = base.loader.loadTexture("green.png")
+    base.floating_items.append(Ball(hp_ball_tex, pos=hp_ball_pos_1))
+    base.floating_items.append(Ball(hp_ball_tex, pos=hp_ball_pos_2))
+    atk_ball_pos_1 = Vec3(-2,3,0)
+    atk_ball_tex = base.loader.loadTexture("purple.png")
+    base.floating_items.append(Ball(atk_ball_tex, pos=atk_ball_pos_1))
 
     base.run()                                      # taskMgr blocks
 
