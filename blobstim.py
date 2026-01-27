@@ -484,6 +484,11 @@ if __name__ == "__main__":
     atk_ball_pos_1 = Vec3(-2,3,0)
     atk_ball_tex = base.loader.loadTexture("purple.png")
     base.floating_items.append(Ball(atk_ball_tex, pos=atk_ball_pos_1))
+    food_ball_pos_1 = Vec3(4,4,0)
+    food_ball_pos_2 = Vec3(0,2,0)
+    food_ball_tex = base.loader.loadTexture("gold.png")
+    base.floating_items.append(Ball(food_ball_tex, pos=food_ball_pos_1))
+    base.floating_items.append(Ball(food_ball_tex, pos=food_ball_pos_2))
 
     base.run()                                      # taskMgr blocks
 
