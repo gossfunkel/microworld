@@ -9,6 +9,7 @@ from panda3d.core import (
 )
 import numpy as np
 from enum import Enum
+from scipy.signal import chirp
 import struct
 
 # this is a little toy with glowy lights and nice sounds for testing ideas for chembattle or something
@@ -79,19 +80,6 @@ def GEN_PRIMS_FORMAT():
     vtx_format.add_array(arrayFormat)
     vtx_format = GeomVertexFormat.register_format(vtx_format)
     return blobPrim, vtx_format
-
-# construct bong
-def make_bong(freq, length=6000, atk=400):
-    freq_scale = length/48000
-    atk: np.array = np.linspace(0,1,atk, dtype=np.float32)                # ascending attack
-    dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)   # descending decay
-    env: np.array = np.append(atk, dec)                                   # generate a simple AD envelope
-    # freq is 400hz because sample length is 1/80s
-    BONG_SAMPLE   = np.array(np.sin(TAU * freq_scale * freq * np.linspace(0,1,length,endpoint=False)) * env * 32767, dtype=np.int16)
-    bong_audio_buff = UserDataAudio(48000,1,False)
-    bong_audio_buff.append(BONG_SAMPLE.tobytes())
-    bong_audio_buff.done()
-    return base.loader.loadSfx(bong_audio_buff)
 
 def ABS_DIST(a: Vec3, b: Vec3) -> float:
     return np.sqrt((a.x-b.x)*(a.x-b.x) + 
@@ -168,6 +156,56 @@ def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFre
 
     return pos, vel
 
+# container for sound effects
+class SoundFX:
+    def __init__(self):
+        self.bongs = []
+        self.brrps = []
+
+    def add_bong(self, freq: int, length: int = 6000, atk: int = 400) -> int:
+        freq_scale = length / 48000                                             # translate length into seconds
+        atk: np.array = np.linspace(0,1,atk, dtype=np.float32)                  # ascending attack
+        dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
+        env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
+        # freq is 400hz because sample length is 1/80s
+        BONG_SAMPLE   = np.array(np.sin(TAU * freq_scale * freq * np.linspace(0,1,length,endpoint=False)) * env * 32767, dtype=np.int16)
+        bong_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
+        bong_audio_buff.append(BONG_SAMPLE.tobytes())                           # add sample
+        bong_audio_buff.done()
+        self.bongs.append(base.loader.loadSfx(bong_audio_buff))                 # load buffer to bongs list
+        return len(self.bongs)-1                                                # return index of bong
+
+    def add_brrp(self, length=3500) -> int:
+        freq_scale: float = length / 48000                                      # translate length into seconds
+        atk: np.array = np.linspace(0,1,2500, dtype=np.float32)                 # ascending attack
+        dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
+        env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
+        amp: float    = .2
+        # TODO chop into little bits
+        BRRP_SAMPLE = np.array(chirp(np.linspace(0,1,length,endpoint=False),    # return value from scipy.signal.chirp with our parameters
+                                     f0=450,
+                                     f1=1000, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * amp, dtype=np.int16)
+        BRRP_SAMPLE_2 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+                                     f0=300,
+                                     f1=700, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * (amp*.5), dtype=np.int16)
+        BRRP_SAMPLE_3 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+                                     f0=150,
+                                     f1=400, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * (amp*.25), dtype=np.int16)
+        BRRP_SAMPLE = np.append(BRRP_SAMPLE, BRRP_SAMPLE_2)
+        BRRP_SAMPLE = np.append(BRRP_SAMPLE, BRRP_SAMPLE_3)
+        brrp_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
+        brrp_audio_buff.append(BRRP_SAMPLE.tobytes())                           # add sample
+        brrp_audio_buff.done()
+        self.brrps.append(base.loader.loadSfx(brrp_audio_buff))                 # load buffer to brrps list
+        return len(self.brrps)-1                                                # return index of brrp
+
+
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: tuple, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
@@ -222,7 +260,7 @@ class Blob:
         #self.nodepath.setShaderAuto()
 
         # now set up accessories
-        self.bong           = make_bong(bong_freq)          # generate sound effect at given freq
+        self.bong           = base.sfx.add_bong(bong_freq) # generate sound effect at given freq
         self.balls          = []                            # array for balls on blob
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
@@ -254,12 +292,13 @@ class Blob:
                 ball.blob = self            # change ball references to self
                 ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
                 ball.set_orbiting_true()
+                base.sfx.bongs[self.bong].play()
                 self.num_balls += 1
 
     def give_ball(self, blob):
         if self.num_balls > 0:
             given_ball = self.balls[self.num_balls-1]
-            self.bong.play()
+            base.sfx.bongs[self.bong].play()
             blob.add_ball(given_ball)
             self.balls.remove(given_ball)
             given_ball.fly_to_target(blob)
@@ -280,7 +319,6 @@ class Blob:
             if ABS_DIST(Vec3(centrepoint.xy, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
                 self.add_ball(item)
                 base.floating_items.remove(item)
-                self.bong.play()
 
         # calculate internal blob forces
         for vtx in range(12):
@@ -335,11 +373,13 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, blob: Blob | None = None, index: int | None = 0):
-        self.type = type
-        self.name = name
-        self.blob = blob            # blob that ball is attached to, if any
+    def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, 
+                 blob: Blob | None = None, index: int | None = 0, sfx = None):
+        self.type  = type
+        self.name  = name
+        self.blob  = blob            # blob that ball is attached to, if any
         self.index = index          # helps balls rotate on the blobs neatly
+        self.sfx   = sfx            # associated noise
         self.radius: float = .15    # personal space
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
         self.angle = 0
@@ -363,7 +403,7 @@ class Ball:
         else:
             self.nodepath.set_pos(self.blob.pos + Vec3(.5,0,.22)) # adjustments for oscillations
         
-            self.blob.bong.play()
+            base.sfx.bongs[self.blob.bong].play()
         self.task_name = f"update_ball-{self.name}"
         base.taskMgr.add(self.update, self.task_name)
 
@@ -379,7 +419,7 @@ class Ball:
         Sequence(
             move_int,
             Func(self.set_orbiting_true),
-            Func(target.bong.play)
+            Func(base.sfx.bongs[target.bong].play)
         ).start()
 
     def update(self, task):
@@ -403,6 +443,7 @@ class Ball:
 
     def consume(self):
         self.nodepath.remove_node(Thread.current_thread)
+        base.sfx.brrps[self.sfx].play()
         taskMgr.remove(self.task_name)
         #if self.blob is not None:
         #    self.blob.remove_blob(self)
@@ -415,6 +456,8 @@ class GameBase(ShowBase):
 
         render.setAntialias(AntialiasAttrib.MAuto)        # set global antialiasing
         render.setShaderAuto()
+
+        self.sfx = SoundFX()                              # initialise sound effect library
 
         big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
         big_light_np.node().setShadowCaster(True, 512, 512)
@@ -505,14 +548,17 @@ if __name__ == "__main__":
 
     hp_ball_pos_1 = Vec3(-4,0,0)
     hp_ball_pos_2 = Vec3(3,-2,0)
-    base.floating_items.append(Ball(BallType.HEAL, "ball-0", pos=hp_ball_pos_1))
-    base.floating_items.append(Ball(BallType.HEAL, "ball-1", pos=hp_ball_pos_2))
+    base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_1))
+    base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_2))
     atk_ball_pos_1 = Vec3(-2,3,0)
-    base.floating_items.append(Ball(BallType.FRNA, "ball-2", pos=atk_ball_pos_1))
+    base.floating_items.append(Ball(BallType.FRNA, f"ball-{len(base.floating_items)}", pos=atk_ball_pos_1))
     food_ball_pos_1 = Vec3(4,4,0)
-    food_ball_pos_2 = Vec3(0,2,0)
-    base.floating_items.append(Ball(BallType.FOOD, "ball-3", pos=food_ball_pos_1))
-    base.floating_items.append(Ball(BallType.FOOD, "ball-4", pos=food_ball_pos_2))
+    food_ball_pos_2 = Vec3(0,-2,0)
+    food_ball_sfx = base.sfx.add_brrp()
+    base.floating_items.append(Ball(BallType.FOOD, f"ball-{len(base.floating_items)}", 
+                                    pos=food_ball_pos_1, sfx=food_ball_sfx))
+    base.floating_items.append(Ball(BallType.FOOD, f"ball-{len(base.floating_items)}", 
+                                    pos=food_ball_pos_2, sfx=food_ball_sfx))
 
     base.run()                                      # taskMgr blocks
 
