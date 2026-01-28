@@ -5,16 +5,19 @@ from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
     GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture, TextNode
+    TextureStage, Texture, TextNode, Thread
 )
 import numpy as np
+from enum import Enum
 import struct
 
-# this is a little toy with glowy lights and nice sounds
-# i'm thinking about testing ideas for chembattle with this
-# the floating blobs can be hp (heal), mana (abilities), protein (grow), fats (defense), salts (metabolism)
+# this is a little toy with glowy lights and nice sounds for testing ideas for chembattle or something
+# the two blobs are supposed to be little microbial cell guys
+# the floating balls can be hp (heal), mana (abilities), protein (upgrade), fats (defense), salts (constitution)
+# considering swapping mana for water and making it a plentiful but constant resource
 # TODO: the blobs don't interact. They should slide past/off each other
-# verticality; since we can only move on a plane, the z-dim can be used to make things inaccessible
+# TODO: spatial partitioning. This ^ and the ball-collection would benefit a lot
+# verticality; since we can only move on a plane, the z-dim could be used to make things inaccessible?
 
 EPSILON: float = .0001              # a very small change
 DAMP_RATIO: float = .3              # sets springyness of object
@@ -36,6 +39,13 @@ BASIS_VECS = np.array([0.,     0.,
                        -.866,  .5,
                        -1.,    0.], dtype='f')
 CAM_POS: Vec3 = Vec3(0,-8,4)       # for keeping the camera a constant vector from the player blob
+
+class BallType(Enum):
+    MANA = "teal.png"       # energy sources - electron transfer agents
+    FOOD = "gold.png"       # energy sources - catabolic substrate
+    HEAL = "green.png"      # nutrition - phospholipids
+    FRNA = "purple.png"     # nutrition - nucleotides
+    SALT = "white65.png"    # salts
 
 CONFIG: str = """
 // gl-version 4 3
@@ -161,7 +171,10 @@ def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFre
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: tuple, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
+        self.type = type
         self.name = name
+        # TODO keeping the nodepath at 0,0,0 causes culling issues. 
+        #       but using it causes matrices to cause drift issues
         self.pos = Vec3(pos,0)
         self.col: tuple   = col
         self.radius: float  = 1.
@@ -210,7 +223,6 @@ class Blob:
 
         # now set up accessories
         self.bong           = make_bong(bong_freq)          # generate sound effect at given freq
-        ball_tex = loader.loadTexture("teal.png")
         self.balls          = []                            # array for balls on blob
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
@@ -227,16 +239,22 @@ class Blob:
     #     return self.nodepath.get_pos()
 
     def add_ball(self, ball=None, balls: int = 1):
-        print(f"adding ball to {self.name}")
-        if isinstance(ball,type(None)): # make a new ball
-            ball_tex = loader.loadTexture("teal.png")
-            self.balls.append(Ball(ball_tex, blob=self, index=self.num_balls))
+        # print(f"adding ball to {self.name}")
+        if isinstance(ball,type(None)): # make a new mana ball
+            # FIXME this will break when a ball is generated after giving one away due to names
+            self.balls.append(Ball(BallType.MANA, self.name+"-ball-"+str(self.num_balls), blob=self, index=self.num_balls))
+            self.num_balls += 1
         else:
-            self.balls.append(ball)     # add ball to balls
-            ball.blob = self            # change ball references to self
-            ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
-            ball.set_orbiting_true()
-        self.num_balls += 1
+            if ball.type is BallType.FOOD:
+                ball.consume()
+                self.radius *= 1.1          # make the blob bigger
+                # TODO add vertex
+            else:
+                self.balls.append(ball)     # add ball to balls
+                ball.blob = self            # change ball references to self
+                ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
+                ball.set_orbiting_true()
+                self.num_balls += 1
 
     def give_ball(self, blob):
         if self.num_balls > 0:
@@ -245,7 +263,7 @@ class Blob:
             blob.add_ball(given_ball)
             self.balls.remove(given_ball)
             given_ball.fly_to_target(blob)
-            print(f"{self.name} gave 1 ball to {blob.name}")
+            # print(f"{self.name} gave 1 ball to {blob.name}")
             self.num_balls -= 1
         else: 
             print("No balls to give!")
@@ -257,7 +275,7 @@ class Blob:
         # the vertex at the centre of the blob
         centrepoint: Vec2 = Vec2(vtx_view_f32[0],vtx_view_f32[1])
 
-        # naive collision check with items
+        # naive collision check with items - TODO spacial hashing
         for item in base.floating_items:
             if ABS_DIST(Vec3(centrepoint.xy, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
                 self.add_ball(item)
@@ -279,8 +297,8 @@ class Blob:
             self.velocities[int(vtx/3-1)] = vel
 
             # TODO modify movement based on collisions
-            if self.colliding:
-                pos = pos - coll_pos
+            #if self.colliding:
+            #    pos = pos - coll_pos
 
             assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
             assert not np.isnan(pos.y), f'Y POSITION IS NAN; SEGFAULT MAY OCCUR'
@@ -317,7 +335,9 @@ class Blob:
 
 
 class Ball:
-    def __init__(self, colour_tex: Texture, pos: Vec3 | None = None, blob: Blob | None = None, index: int | None = 0):
+    def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, blob: Blob | None = None, index: int | None = 0):
+        self.type = type
+        self.name = name
         self.blob = blob            # blob that ball is attached to, if any
         self.index = index          # helps balls rotate on the blobs neatly
         self.radius: float = .15    # personal space
@@ -328,27 +348,24 @@ class Ball:
         model = base.loader.load_model("sphere.egg")
         model.setTransparency(1)
         ts_col = TextureStage('ts_col')
-        model.setTexture(ts_col, colour_tex)
+        model.setTexture(ts_col, loader.loadTexture(self.type.value))
         # model.set_color(Vec4(self.blob.col, 1))
         ts_glow = TextureStage('ts_glow')
         ts_glow.setMode(TextureStage.MGlow)
         black_tex = loader.loadTexture("black.png")
         model.setTexture(ts_glow, black_tex)
         model.set_scale(.06)
+        self.nodepath = base.render.attach_new_node(f"ball-{self.name}")
+        model.reparent_to(self.nodepath)
         if self.blob is None:
             assert pos is not None, f"A free ball must have a position!"
-            self.nodepath = base.render.attach_new_node(f"ball_floating")
-            model.reparent_to(self.nodepath)
             self.nodepath.set_pos(pos)                            # use given position
-            base.taskMgr.add(self.update, f"update_ball_fl")
         else:
-            self.nodepath = base.render.attach_new_node(f"ball-{self.blob.name}")
-            model.reparent_to(self.nodepath)
             self.nodepath.set_pos(self.blob.pos + Vec3(.5,0,.22)) # adjustments for oscillations
-            base.taskMgr.add(self.update, f"update_ball-{self.blob.name}")
         
             self.blob.bong.play()
-
+        self.task_name = f"update_ball-{self.name}"
+        base.taskMgr.add(self.update, self.task_name)
 
     def set_orbiting_true(self):
         self.orbiting = True
@@ -382,7 +399,14 @@ class Ball:
             self.nodepath.set_pos(pos + (aimpos-pos)*damper)
         else:
             self.nodepath.set_pos(pos.x,pos.y,0+np.sin(globalClock.getDt())*.1)
-        return task.cont       
+        return task.cont
+
+    def consume(self):
+        self.nodepath.remove_node(Thread.current_thread)
+        taskMgr.remove(self.task_name)
+        #if self.blob is not None:
+        #    self.blob.remove_blob(self)
+        # play a little consume brrrrp
 
 class GameBase(ShowBase):
     def __init__(self):
@@ -470,25 +494,25 @@ class GameBase(ShowBase):
         self.p2_label_v.setText(str(self.p2.num_balls))
         return task.cont
 
+    def __del__(self):
+        print("="*20 + " See you soon!:) " + 20*"=")
+
 if __name__ == "__main__":
-    print("="*20 + " Welcome to blobstim:) " + 20*"=")
+    print("="*20 + " Welcome to blobstim! " + 20*"=")
     base = GameBase()                               # Showbase initialised
 
     # simplepbr.init(use_330=True)
 
     hp_ball_pos_1 = Vec3(-4,0,0)
     hp_ball_pos_2 = Vec3(3,-2,0)
-    hp_ball_tex = base.loader.loadTexture("green.png")
-    base.floating_items.append(Ball(hp_ball_tex, pos=hp_ball_pos_1))
-    base.floating_items.append(Ball(hp_ball_tex, pos=hp_ball_pos_2))
+    base.floating_items.append(Ball(BallType.HEAL, "ball-0", pos=hp_ball_pos_1))
+    base.floating_items.append(Ball(BallType.HEAL, "ball-1", pos=hp_ball_pos_2))
     atk_ball_pos_1 = Vec3(-2,3,0)
-    atk_ball_tex = base.loader.loadTexture("purple.png")
-    base.floating_items.append(Ball(atk_ball_tex, pos=atk_ball_pos_1))
+    base.floating_items.append(Ball(BallType.FRNA, "ball-2", pos=atk_ball_pos_1))
     food_ball_pos_1 = Vec3(4,4,0)
     food_ball_pos_2 = Vec3(0,2,0)
-    food_ball_tex = base.loader.loadTexture("gold.png")
-    base.floating_items.append(Ball(food_ball_tex, pos=food_ball_pos_1))
-    base.floating_items.append(Ball(food_ball_tex, pos=food_ball_pos_2))
+    base.floating_items.append(Ball(BallType.FOOD, "ball-3", pos=food_ball_pos_1))
+    base.floating_items.append(Ball(BallType.FOOD, "ball-4", pos=food_ball_pos_2))
 
     base.run()                                      # taskMgr blocks
 
