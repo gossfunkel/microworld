@@ -5,7 +5,7 @@ from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
     GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture, TextNode, Thread
+    TextureStage, Texture, TextNode, Thread, Shader
 )
 import numpy as np
 from enum import Enum
@@ -78,6 +78,9 @@ def GEN_PRIMS_FORMAT():
     arrayFormat = GeomVertexArrayFormat()
     arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.C_color)
     vtx_format.add_array(arrayFormat)
+    arrayFormat = GeomVertexArrayFormat()
+    arrayFormat.add_column("basis",2,GeomEnums.NT_float32, GeomEnums.C_point)
+    vtx_format.add_array(arrayFormat)
     vtx_format = GeomVertexFormat.register_format(vtx_format)
     return blobPrim, vtx_format
 
@@ -86,75 +89,6 @@ def ABS_DIST(a: Vec3, b: Vec3) -> float:
                    (a.y-b.y)*(a.y-b.y) +
                    (a.z-b.z)*(a.z-b.z))
 
-def SHO(pos: Vec2, vel: Vec2, equilibriumPos: Vec2, deltaTime: float, angularFreq: float):
-    assert (angularFreq >= 0.), f'SHM angular frequency parameter must be positive!'
-    assert (DAMP_RATIO >= 0.), f'SHM damping ratio parameter must be positive!'
-
-    if (angularFreq < EPSILON):
-        print("SHM frequency too low to change motion!")
-        pospos = 1.
-        posvel = 0.
-        velpos = 0.
-        velvel = 1.
-    else:
-        if (DAMP_RATIO > 1. + EPSILON):
-            # overdamped formula
-            za = -angularFreq * DAMP_RATIO
-            zb = angularFreq * np.sqrt(DAMP_RATIO*DAMP_RATIO - 1.)
-            z1 = za - zb
-            z2 = za + zb
-
-            e1 = np.exp(z1 * deltaTime)
-            e2 = np.exp(z2 * deltaTime)
-
-            invTwoZb = 1. / (2. * zb)
-
-            e1OverTwoZb = e1 * invTwoZb
-            e2OverTwoZb = e2 * invTwoZb
-
-            z1e1OverTwoZb = z1 * e1OverTwoZb
-            z2e2OverTwoZb = z2 * e2OverTwoZb
-
-            pospos = e1OverTwoZb * z2e2OverTwoZb + e2OverTwoZb
-            posvel = -e1OverTwoZb + e2OverTwoZb
-            velpos = (z1e1OverTwoZb - z2e2OverTwoZb + e2) * z2 
-            velvel = -z1e1OverTwoZb + z2e2OverTwoZb
-        elif (DAMP_RATIO < 1. - EPSILON):
-            # underdamped formula
-            omegaZeta = angularFreq * DAMP_RATIO
-            alpha     = angularFreq * np.sqrt(1. - DAMP_RATIO * DAMP_RATIO)
-
-            expTerm = np.exp(-omegaZeta * deltaTime)
-            cosTerm = np.cos(alpha * deltaTime)
-            sinTerm = np.sin(alpha * deltaTime)
-
-            invAlpha = 1. / alpha 
-
-            expSin = expTerm * sinTerm
-            expCos = expTerm * cosTerm
-            expOmegaZetaSinOverAlpha = expTerm * omegaZeta * sinTerm * invAlpha
-
-            pospos = expCos + expOmegaZetaSinOverAlpha
-            posvel = expSin * invAlpha
-            velpos = -expSin * alpha - omegaZeta * expOmegaZetaSinOverAlpha
-            velvel = expCos - expOmegaZetaSinOverAlpha
-        else:
-            # critically damped formula
-            expTerm = np.exp(-angularFreq * deltaTime)
-            timeExp = deltaTime * expTerm
-            timeExpFreq = timeExp * angularFreq
-
-            pospos = timeExpFreq + expTerm
-            posvel = timeExp
-            velpos = -angularFreq * timeExpFreq
-            velvel = -timeExpFreq + expTerm
-
-    pos = pos - equilibriumPos
-    oldvel = vel
-    vel = pos * velpos + oldvel * velvel
-    pos = pos * pospos + oldvel * posvel + equilibriumPos
-
-    return pos, vel
 
 # container for sound effects
 class SoundFX:
@@ -223,27 +157,32 @@ class Blob:
         self.colliding    = False
 
         # open memoryviews to write position, normal, and colour data to VBO
-        pos_view  = memoryview(self.vtx_data.modify_array(0)).cast('B')
-        norm_view = memoryview(self.vtx_data.modify_array(1)).cast('B')
-        col_view  = memoryview(self.vtx_data.modify_array(2)).cast('B')
+        pos_view    = memoryview(self.vtx_data.modify_array(0)).cast('B')
+        norm_view   = memoryview(self.vtx_data.modify_array(1)).cast('B')
+        col_view    = memoryview(self.vtx_data.modify_array(2)).cast('B')
+        basis_view  = memoryview(self.vtx_data.modify_array(3)).cast('B')
 
         vtx_vals = bytearray()
-        for i in range(self.verts+1):
-            # generate circular layout with basis vectors
+        basis_vals = bytearray()
+        # generate circular layout with basis vectors and populate array with structs
+        for i in range(13):
             vtx_vals.extend(struct.pack(
                 '3f',
                 pos.x+BASIS_VECS[i*2]*self.radius, pos.y+BASIS_VECS[i*2+1]*self.radius, 0.))
-        # pack values into memoryview
-        pos_view[:] = vtx_vals
+            basis_vals.extend(struct.pack('3f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
 
         # now generate and pack the normals and colours the same way
-        norm_vals = bytearray()
-        col_vals  = bytearray()
+        norm_vals  = bytearray()
+        col_vals   = bytearray()
         for _ in range(13):
             norm_vals.extend(struct.pack('3f', 0.,0.,1.))
             col_vals.extend(struct.pack('4B', col[0], col[1], col[2], 255))
-        norm_view[:] = norm_vals
-        col_view[:]  = col_vals
+
+        # write values to VBO with memoryview
+        pos_view[:]   = vtx_vals
+        norm_view[:]  = norm_vals
+        col_view[:]   = col_vals
+        basis_view[:] = basis_vals
 
         # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
         geom = Geom(self.vtx_data)
@@ -257,7 +196,6 @@ class Blob:
         #self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
         self.nodepath.setDepthOffset(1)
-        #self.nodepath.setShaderAuto()
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq) # generate sound effect at given freq
@@ -266,15 +204,26 @@ class Blob:
         self.num_balls: int = len(self.balls)               # to help with angle calculations
 
         # start at rest
-        self.velocities: list[Vec2] = [Vec2(0.,0.) for _ in range(12)]
+        self.velocities = np.array([Vec2(0.,0.) for _ in range(12)], dtype=np.float32)
+        self.vel_buffer = ShaderBuffer("vel_ubo", self.velocities.tobytes(), GeomEnums.UHDynamic)
+
+        # activate the jiggle shader on the blob
+        self.nodepath.set_shader(Shader(vertex="blob_jiggle.vert"))
+        self.nodepath.set_shader_input("velocities", self.vel_buffer)
+        self.nodepath.set_shader_input("radius", self.radius)
+        #self.nodepath.setShaderAuto()
 
         base.taskMgr.add(self.update, str(name)+"-update")
 
         print(f"== blob {name} created!")
 
     # getter to make this quicker
-    # def pos(self) -> Vec3:
-    #     return self.nodepath.get_pos()
+    def pos(self) -> Vec3:
+        return self.nodepath.get_pos()
+
+    def grow(self):
+        self.radius *= 1.1                                    # make the blob bigger
+        self.nodepath.set_shader_input("radius", self.radius) # update the shader
 
     def add_ball(self, ball=None, balls: int = 1):
         # print(f"adding ball to {self.name}")
@@ -285,8 +234,9 @@ class Blob:
         else:
             if ball.type is BallType.FOOD:
                 ball.consume()
-                self.radius *= 1.1          # make the blob bigger
+                self.grow()
                 # TODO add vertex
+                # TODO update VBO on adding/removing verts
             else:
                 self.balls.append(ball)     # add ball to balls
                 ball.blob = self            # change ball references to self
@@ -308,68 +258,30 @@ class Blob:
             print("No balls to give!")
 
     def update(self, task):
-        # TODO move the procedural animation to a vertex shader (collisions??)
-        vtx_view_f32 = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
-
-        # the vertex at the centre of the blob
-        centrepoint: Vec2 = Vec2(vtx_view_f32[0],vtx_view_f32[1])
-
         # naive collision check with items - TODO spacial hashing
         for item in base.floating_items:
-            if ABS_DIST(Vec3(centrepoint.xy, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
+            if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
                 self.add_ball(item)
                 base.floating_items.remove(item)
-
-        # calculate internal blob forces
-        for vtx in range(12):
-            vel: Vec2 = self.velocities[vtx]
-            dt: float = globalClock.getDt()
-            vtx += 1
-            basis: Vec2 = Vec2(BASIS_VECS[vtx*2], BASIS_VECS[vtx*2+1])
-            vtx *= 3
-
-            pos: Vec2 = Vec2(vtx_view_f32[vtx], vtx_view_f32[vtx+1])
-
-            sprungPos, vel = SHO(pos,vel,centrepoint+basis*self.radius,dt,10.)
-            pos = sprungPos + vel*dt
-            self.velocities[int(vtx/3-1)] = vel
-
-            # TODO modify movement based on collisions
-            #if self.colliding:
-            #    pos = pos - coll_pos
-
-            assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
-            assert not np.isnan(pos.y), f'Y POSITION IS NAN; SEGFAULT MAY OCCUR'
-            vtx_view_f32[vtx]   = pos.x if not np.isnan(pos.x) else 0
-            vtx_view_f32[vtx+1] = pos.y if not np.isnan(pos.y) else 0
-            vtx_view_f32[vtx+2] = 0. # pos.z
 
         self.spinner += (globalClock.getDt())%360
         return task.cont
 
     # move the blob by its centrepoint
-    def move(self, direction) -> bool:
+    def move(self, direction):
         #print(self.view[1].to_bytes())
-        vtx_view_f32 = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
+        pos = self.pos()
         match direction:
             case "left":                        # go left
-                vtx_view_f32[0] -= .05
-                self.pos.x -= .05
-                return 1
+                self.nodepath.set_pos(pos - Vec3(.05,0.,0.))
             case "right":                       # go right
-                vtx_view_f32[0] += .05
-                self.pos.x += .05
-                return 1
+                self.nodepath.set_pos(pos + Vec3(.05,0.,0.))
             case "fwd":                         # go forwards
-                vtx_view_f32[1] += .05
-                self.pos.y += .05
-                return 1
+                self.nodepath.set_pos(pos + Vec3(0.,.05,0.))
             case "back":                        # ...you guessed it
-                vtx_view_f32[1] -= .05
-                self.pos.y -= .05
-                return 1
+                self.nodepath.set_pos(pos - Vec3(0.,.05,0.))
             case _: 
-                return 0
+                print("Move direction not recognised!")
 
 
 class Ball:
@@ -401,7 +313,7 @@ class Ball:
             assert pos is not None, f"A free ball must have a position!"
             self.nodepath.set_pos(pos)                            # use given position
         else:
-            self.nodepath.set_pos(self.blob.pos + Vec3(.5,0,.22)) # adjustments for oscillations
+            self.nodepath.set_pos(self.blob.pos() + Vec3(.5,0,.22)) # adjustments for oscillations
         
             base.sfx.bongs[self.blob.bong].play()
         self.task_name = f"update_ball-{self.name}"
@@ -431,9 +343,9 @@ class Ball:
             # bob up and down
             elevation = self.radius*1.2 + .04 * np.sin(self.angle)
             # go round in a little circle over the blob
-            aimpos = self.blob.pos + Vec3(np.cos(self.angle)/2.,
-                                          np.sin(self.angle)/2.,
-                                          elevation)
+            aimpos = self.blob.pos() + Vec3(np.cos(self.angle)/2.,
+                                            np.sin(self.angle)/2.,
+                                            elevation)
             abs_dist: float = ABS_DIST(pos, aimpos)                 # absolute distance of that lad
             damper = min(1, max(0, abs_dist/2))                     # 1 if far, 0 if close
             self.nodepath.set_pos(pos + (aimpos-pos)*damper)

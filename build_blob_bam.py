@@ -31,9 +31,6 @@ ShowBase()
 
 print("-- ShowBase initialised. Creating formats...")
 
-# edgepoint verts
-verts: int        = 12
-
 blobPrim    = GeomTrifans(Geom.UHStatic)
 blobPrim.add_consecutive_vertices(0,13)
 blobPrim.add_vertex(1)
@@ -51,7 +48,7 @@ arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.
 vtx_format.add_array(arrayFormat)
 vtx_format  = GeomVertexFormat.register_format(vtx_format)
 vtx_data    = GeomVertexData('blob_verts', vtx_format, Geom.UHStatic)
-vtx_data.unclean_set_num_rows(verts+1) # 1 row per vertex (12 rim, 1 centre)
+vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
 print("-- Formats registered. Creating geometry...")
 
@@ -61,11 +58,11 @@ norm_view = memoryview(vtx_data.modify_array(1)).cast('B')
 col_view  = memoryview(vtx_data.modify_array(2)).cast('B')
 
 vtx_vals = bytearray()
-for i in range(verts+1):
+for i in range(13):
     # generate circular layout with basis vectors
     vtx_vals.extend(struct.pack(
         '3f',
-        BASIS_VECS[i], BASIS_VECS[i+1], 0.))
+        BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0.))
 # pack values into memoryview
 pos_view[:] = vtx_vals
 
