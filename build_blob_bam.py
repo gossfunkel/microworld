@@ -1,6 +1,6 @@
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
-    loadPrcFileData, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath,
+    loadPrcFileData, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName
 )
 import struct
@@ -38,16 +38,14 @@ blobPrim.closePrimitive()
 # vtx_format = GeomVertexFormat.getV3n3c4()
 vtx_format  = GeomVertexFormat()
 arrayFormat = GeomVertexArrayFormat()
+arrayFormat.set_divisor(0)
+arrayFormat.set_stride(20)
 arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
-vtx_format.add_array(arrayFormat)
-arrayFormat = GeomVertexArrayFormat()
 arrayFormat.add_column(InternalName.get_normal(),3,GeomEnums.NT_float32, GeomEnums.C_point)
-vtx_format.add_array(arrayFormat)
-arrayFormat = GeomVertexArrayFormat()
 arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.C_color)
-vtx_format.add_array(arrayFormat)
-arrayFormat = GeomVertexArrayFormat()
-arrayFormat.add_column("basis",2,GeomEnums.NT_float32, GeomEnums.C_point)
+arrayFormat.add_column(InternalName.get_vertex().get_parent().append("basis"),2,GeomEnums.NT_float32, GeomEnums.C_point)
+arrayFormat.add_column(InternalName.get_vertex().get_parent().append("velocity"),2,GeomEnums.NT_float32, GeomEnums.C_point)
+arrayFormat.pack_columns()
 vtx_format.add_array(arrayFormat)
 vtx_format  = GeomVertexFormat.register_format(vtx_format)
 vtx_data    = GeomVertexData('blob_verts', vtx_format, Geom.UHStatic)
@@ -55,35 +53,28 @@ vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
 print("-- Formats registered. Creating geometry...")
 
-# open memoryviews to write position, normal, and colour data to VBO
-pos_view   = memoryview(vtx_data.modify_array(0)).cast('B')
-norm_view  = memoryview(vtx_data.modify_array(1)).cast('B')
-col_view   = memoryview(vtx_data.modify_array(2)).cast('B')
-basis_view = memoryview(vtx_data.modify_array(3)).cast('B')
+# open memoryviews to write position, normal, colour, basis, and velocity data to VBO
+view   = memoryview(vtx_data.modify_array(0)).cast('B')
+#stride = 24
 
-vtx_vals = bytearray()
-basis_vals = bytearray()
+vals = bytearray()
 for i in range(13):
-    # generate circular layout with basis vectors
-    vtx_vals.extend(struct.pack('4f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0., 1.))
-    basis_vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
-
-# now generate and pack the normals and colours the same way
-norm_vals = bytearray()
-col_vals  = bytearray()
-for _ in range(13):
-    norm_vals.extend(struct.pack('3f', 0.,0.,1.))
-    col_vals.extend(struct.pack('4B', 255, 255, 255, 255))
+    # populate the bytearray with each row
+    vals.extend(struct.pack('4f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0., 1.))
+    vals.extend(struct.pack('3f', 0.,0.,1.))
+    vals.extend(struct.pack('4B', 255, 255, 255, 255))
+    vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
+    vals.extend(struct.pack('2f', 0., 0.))
 
 # write to VBO
-pos_view[:] = vtx_vals
-norm_view[:] = norm_vals
-col_view[:]  = col_vals
-basis_view[:] = basis_vals
+view[:] = vals
 
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
 geom = Geom(vtx_data)
 geom.addPrimitive(blobPrim)
+# set up a bounding volume to prevent culling
+geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))
+geom.doublesideInPlace()
 geom_node = GeomNode('blob-geom_node')
 geom_node.addGeom(geom)
 

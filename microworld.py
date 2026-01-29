@@ -123,35 +123,53 @@ class Blob:
         self.name           = name
         self.col: tuple     = col
         self.radius: float  = 2.
-        self.verts: int     = 12
+        self.verts: int     = 12        # number of OUTER vertices (blob requires centre)
         self.colliding      = False
 
-        # create a new node and attach to base.render
+        # load the default blob from file
         self.nodepath = loader.loadModel("blob_default.bam")
         self.nodepath.set_color(Vec4(col, 255))
+
+        # modify geom vertex data from file
+        vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
+
+        # modify basis vecs by radius
+        # basis = BASIS_VECS * radius
+        # basis_view = memoryview(vtx_data.modify_array(3)).cast('B')
+        # basis_vals = bytearray()
+        # for i in range(13):
+        #     basis_vals.extend(struct.pack('2f', basis[i*2], basis[i*2 + 1]))
+        # basis_view[:] = basis_vals
+
+        # make an SSBO from the model data for vertex pulling
+        stride = 20
+        byte_data = bytearray()
+        p3d_array = vtx_data.get_array_handle(0).get_data()
+        cust_array = vtx_data.get_array_handle(1).get_data()
+        for i in range(self.verts):
+            byte_data.extend(p3d_array[i*stride:i*stride+15])
+            byte_data.extend(p3d_array[i*stride+15:i*stride+19])
+        self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
+
+        # node = GeomNode(f"{self.name}_geom")
+        # node.add_geom(geom)
         self.nodepath.reparent_to(base.render)
         # store position in the node 
         self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
         self.nodepath.setDepthOffset(1)
 
-        # TODO modify basis vecs by radius
+        # activate the jiggle shader on the blob
+        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
+        self.nodepath.set_shader_input("ssbo", self.buffer)
+        self.nodepath.set_shader_input("radius", self.radius)
+        #self.nodepath.setShaderAuto()
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq)  # generate sound effect at given freq
         self.balls          = []                            # array for balls on blob
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
-
-        # create array of velocities and construct a VBO
-        self.velocities = np.array([Vec2(0.,0.) for _ in range(12)], dtype=np.float32)
-        self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
-
-        # activate the jiggle shader on the blob
-        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
-        self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
-        self.nodepath.set_shader_input("radius", self.radius)
-        #self.nodepath.setShaderAuto()
 
         base.taskMgr.add(self.update, str(name)+"-update")
 
