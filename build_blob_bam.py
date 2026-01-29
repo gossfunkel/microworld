@@ -31,18 +31,15 @@ ShowBase()
 
 print("-- ShowBase initialised. Creating formats...")
 
-blobPrim    = GeomTrifans(Geom.UHStatic)
-blobPrim.add_consecutive_vertices(0,13)
-blobPrim.add_vertex(1)
-blobPrim.closePrimitive()
 # vtx_format = GeomVertexFormat.getV3n3c4()
 vtx_format  = GeomVertexFormat()
 arrayFormat = GeomVertexArrayFormat()
 arrayFormat.set_divisor(0)
-arrayFormat.set_stride(20)
+arrayFormat.set_stride(128)
 arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
 arrayFormat.add_column(InternalName.get_normal(),3,GeomEnums.NT_float32, GeomEnums.C_point)
-arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.C_color)
+arrayFormat.add_column(InternalName.getSize(), 1, GeomEnums.NT_float32, GeomEnums.C_other)
+arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint32, GeomEnums.C_color)
 arrayFormat.add_column(InternalName.get_vertex().get_parent().append("basis"),2,GeomEnums.NT_float32, GeomEnums.C_point)
 arrayFormat.add_column(InternalName.get_vertex().get_parent().append("velocity"),2,GeomEnums.NT_float32, GeomEnums.C_point)
 arrayFormat.pack_columns()
@@ -62,7 +59,8 @@ for i in range(13):
     # populate the bytearray with each row
     vals.extend(struct.pack('4f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0., 1.))
     vals.extend(struct.pack('3f', 0.,0.,1.))
-    vals.extend(struct.pack('4B', 255, 255, 255, 255))
+    vals.extend(struct.pack('f', 0.))
+    vals.extend(struct.pack('4I', 255, 255, 255, 255))
     vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
     vals.extend(struct.pack('2f', 0., 0.))
 
@@ -71,6 +69,10 @@ view[:] = vals
 
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
 geom = Geom(vtx_data)
+blobPrim    = GeomTrifans(Geom.UHStatic)
+blobPrim.add_consecutive_vertices(0,13)
+blobPrim.add_vertex(1)
+blobPrim.closePrimitive()
 geom.addPrimitive(blobPrim)
 # set up a bounding volume to prevent culling
 geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))

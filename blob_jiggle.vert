@@ -16,7 +16,8 @@ layout (std430, binding = 0) buffer ssbo {
     // 11 float32s and 4 int8s - 384b; 12 * scalar (4 bits)
     vec4 p3d_Vertex[13];
     vec3 p3d_Normal[13];
-    ivec4 p3d_Color[13];
+    float size[13];
+    uvec4 p3d_Color[13];
     vec2 basis[13];
     vec2 velocity[13]; 
 };

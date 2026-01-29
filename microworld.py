@@ -142,13 +142,18 @@ class Blob:
         # basis_view[:] = basis_vals
 
         # make an SSBO from the model data for vertex pulling
-        stride = 20
         byte_data = bytearray()
         p3d_array = vtx_data.get_array_handle(0).get_data()
+        stride_0 = 88
         cust_array = vtx_data.get_array_handle(1).get_data()
-        for i in range(self.verts):
-            byte_data.extend(p3d_array[i*stride:i*stride+15])
-            byte_data.extend(p3d_array[i*stride+15:i*stride+19])
+        stride_1 = 40
+        for i in range(self.verts+1):
+            byte_data.extend(p3d_array[i*stride_0    :i*stride_0+31])    # pos
+            byte_data.extend(p3d_array[i*stride_0+31 :i*stride_0+55])    # norm
+            byte_data.extend(cust_array[i*stride_1   :i*stride_1+7])    # size (pad)
+            byte_data.extend(p3d_array[i*stride_0+55 :i*stride_0+87])    # col
+            byte_data.extend(cust_array[i*stride_1+7 :i*stride_1+23])   # basis
+            byte_data.extend(cust_array[i*stride_1+23:i*stride_1+39])   # vel
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
         # node = GeomNode(f"{self.name}_geom")
