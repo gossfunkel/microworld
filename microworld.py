@@ -150,7 +150,7 @@ class Blob:
         self.verts: int   = 12
         prims, vtx_format = GEN_PRIMS_FORMAT()
         self.vtx_data     = GeomVertexData(name+'-verts', vtx_format, Geom.UHStatic)
-        self.vtx_data.unclean_set_num_rows(self.verts+1) # 1 row per vertex (12 rim, 1 centre)
+        self.vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
         self.colliding    = False
 
         # open memoryviews to write position, normal, and colour data to VBO
@@ -165,7 +165,7 @@ class Blob:
         for i in range(13):
             vtx_vals.extend(struct.pack(
                 '4f',
-                pos.x+BASIS_VECS[i*2]*self.radius, pos.y+BASIS_VECS[i*2+1]*self.radius, 0., 0.))
+                BASIS_VECS[i*2]*self.radius, BASIS_VECS[i*2+1]*self.radius, 0., 1.))
             basis_vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
 
         # now generate and pack the normals and colours the same way
@@ -195,7 +195,7 @@ class Blob:
         self.nodepath.setDepthOffset(1)
 
         # now set up accessories
-        self.bong           = base.sfx.add_bong(bong_freq) # generate sound effect at given freq
+        self.bong           = base.sfx.add_bong(bong_freq)  # generate sound effect at given freq
         self.balls          = []                            # array for balls on blob
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
@@ -206,7 +206,7 @@ class Blob:
 
         # activate the jiggle shader on the blob
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
-        self.nodepath.set_shader_input("velocities", self.vel_buffer)
+        self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
         self.nodepath.set_shader_input("radius", self.radius)
         #self.nodepath.setShaderAuto()
 
@@ -324,7 +324,7 @@ class Ball:
         # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)
         ratio = (self.index+1) / self.blob.num_balls
         elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio)   # this works if dt is in seconds (doubt, hahaha)
-        move_int = self.nodepath.posInterval(1., target.pos + Vec3(0,0,elevation), fluid=1)
+        move_int = self.nodepath.posInterval(1., target.pos() + Vec3(0,0,elevation), fluid=1)
         Sequence(
             move_int,
             Func(self.set_orbiting_true),
@@ -361,7 +361,7 @@ class Ball:
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
-        self.set_background_color(0,0,0,1)                # dark background
+        #self.set_background_color(0,0,0,1)                # dark background
 
         render.setAntialias(AntialiasAttrib.MAuto)        # set global antialiasing
         render.setShaderAuto()
