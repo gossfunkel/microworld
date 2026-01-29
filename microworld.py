@@ -24,7 +24,6 @@ EPSILON: float = .0001              # a very small change
 DAMP_RATIO: float = .3              # sets springyness of object
 DIST_EDGEPOINTS: float = .51        # hopefully should be compatible with the radius
 # VOL_SCALE_FACTOR: float = 1.      # for volume preservation
-# RADIUS: float = 1.                  # for maintaining roundness
 TAU: float = np.pi * 2              # for calculating circles
 BASIS_VECS = np.array([0.,     0.,
                        -.866, -.5,
@@ -49,40 +48,18 @@ class BallType(Enum):
     SALT = "white65.png"    # salts
 
 CONFIG: str = """
-// gl-version 4 3
-// gl-debug 1
+gl-version 4 3
+gl-debug 1
 win-size 1200 800
 show-frame-rate-meter 1
 hardware-animated-vertices true
 framebuffer-srgb true
 basic-shaders-only false
-framebuffer-multisample 1
-multisamples 2
+//framebuffer-multisample true
+//multisamples 4
 //threading-model Cull/Draw
 """
 loadPrcFileData("", CONFIG)
-
-def GEN_PRIMS_FORMAT():
-    blobPrim = GeomTrifans(Geom.UHStatic)
-    blobPrim.add_consecutive_vertices(0,13)
-    blobPrim.add_vertex(1)
-    blobPrim.closePrimitive()
-    #vtx_format = GeomVertexFormat.getV3n3c4()
-    vtx_format = GeomVertexFormat()
-    arrayFormat = GeomVertexArrayFormat()
-    arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
-    vtx_format.add_array(arrayFormat)
-    arrayFormat = GeomVertexArrayFormat()
-    arrayFormat.add_column(InternalName.get_normal(),3,GeomEnums.NT_float32, GeomEnums.C_point)
-    vtx_format.add_array(arrayFormat)
-    arrayFormat = GeomVertexArrayFormat()
-    arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.C_color)
-    vtx_format.add_array(arrayFormat)
-    arrayFormat = GeomVertexArrayFormat()
-    arrayFormat.add_column("basis",2,GeomEnums.NT_float32, GeomEnums.C_point)
-    vtx_format.add_array(arrayFormat)
-    vtx_format = GeomVertexFormat.register_format(vtx_format)
-    return blobPrim, vtx_format
 
 def ABS_DIST(a: Vec3, b: Vec3) -> float:
     return np.sqrt((a.x-b.x)*(a.x-b.x) + 
@@ -139,56 +116,21 @@ class SoundFX:
         self.brrps.append(base.loader.loadSfx(brrp_audio_buff))                 # load buffer to brrps list
         return len(self.brrps)-1                                                # return index of brrp
 
-
+# a PC. cell-like blobby guy that blobs about
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: tuple, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
-        self.type = type
-        self.name = name
-        self.col: tuple   = col
+        self.type           = type
+        self.name           = name
+        self.col: tuple     = col
         self.radius: float  = 1.
-        self.verts: int   = 12
-        prims, vtx_format = GEN_PRIMS_FORMAT()
-        self.vtx_data     = GeomVertexData(name+'-verts', vtx_format, Geom.UHStatic)
-        self.vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
-        self.colliding    = False
-
-        # open memoryviews to write position, normal, and colour data to VBO
-        pos_view    = memoryview(self.vtx_data.modify_array(0)).cast('B')
-        norm_view   = memoryview(self.vtx_data.modify_array(1)).cast('B')
-        col_view    = memoryview(self.vtx_data.modify_array(2)).cast('B')
-        basis_view  = memoryview(self.vtx_data.modify_array(3)).cast('B')
-
-        vtx_vals = bytearray()
-        basis_vals = bytearray()
-        # generate circular layout with basis vectors and populate array with structs
-        for i in range(13):
-            vtx_vals.extend(struct.pack(
-                '4f',
-                BASIS_VECS[i*2]*self.radius, BASIS_VECS[i*2+1]*self.radius, 0., 1.))
-            basis_vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
-
-        # now generate and pack the normals and colours the same way
-        norm_vals  = bytearray()
-        col_vals   = bytearray()
-        for _ in range(13):
-            norm_vals.extend(struct.pack('3f', 0.,0.,1.))
-            col_vals.extend(struct.pack('4B', col[0], col[1], col[2], 255))
-
-        # write values to VBO with memoryview
-        pos_view[:]   = vtx_vals
-        norm_view[:]  = norm_vals
-        col_view[:]   = col_vals
-        basis_view[:] = basis_vals
-
-        # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
-        geom = Geom(self.vtx_data)
-        geom.addPrimitive(prims)
-        self.geom_node = GeomNode(name+'-geom_node')
-        self.geom_node.addGeom(geom)
+        self.verts: int     = 12
+        self.colliding      = False
 
         # create a new node and attach to base.render
-        self.nodepath = base.render.attach_new_node(self.geom_node)
+        self.nodepath = loader.loadModel("blob_default.bam")
+        self.nodepath.set_color(Vec4(col, 255))
+        self.nodepath.reparent_to(base.render)
         # store position in the node 
         self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
@@ -202,12 +144,12 @@ class Blob:
 
         # create array of velocities and construct a VBO
         self.velocities = np.array([Vec2(0.,0.) for _ in range(12)], dtype=np.float32)
-        self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
+        #self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
 
         # activate the jiggle shader on the blob
-        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
-        self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
-        self.nodepath.set_shader_input("radius", self.radius)
+        #self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
+        #self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
+        #self.nodepath.set_shader_input("radius", self.radius)
         #self.nodepath.setShaderAuto()
 
         base.taskMgr.add(self.update, str(name)+"-update")
@@ -220,7 +162,7 @@ class Blob:
 
     def grow(self):
         self.radius *= 1.1                                    # make the blob bigger
-        self.nodepath.set_shader_input("radius", self.radius) # update the shader
+        #self.nodepath.set_shader_input("radius", self.radius) # update the shader
 
     def add_ball(self, ball=None, balls: int = 1):
         # print(f"adding ball to {self.name}")
@@ -255,6 +197,11 @@ class Blob:
             print("No balls to give!")
 
     def update(self, task):
+        # processor-killing debug
+        #print(f"blob {self.name} nodepath position: {self.pos()}")
+        #vtx_view = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
+        #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
+
         # naive collision check with items - TODO spacial hashing
         for item in base.floating_items:
             if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
@@ -280,7 +227,7 @@ class Blob:
             case _: 
                 print("Move direction not recognised!")
 
-
+# floating resource orbs. can bind to blobs
 class Ball:
     def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, 
                  blob: Blob | None = None, index: int | None = 0, sfx = None):
@@ -370,7 +317,7 @@ class GameBase(ShowBase):
 
         big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
         big_light_np.node().setShadowCaster(True, 512, 512)
-        big_light_np.set_color(.5,.45,.39)
+        big_light_np.set_color(.5,.45,.49)
         big_light_np.setHpr(20, -80, 0)
         render.setLight(big_light_np)                     # set a warm directional light on the whole scene
 
@@ -429,8 +376,8 @@ class GameBase(ShowBase):
         self.cam.setPos(CAM_POS)                            # spawn camera distance from origin
         self.cam.setHpr(0,-22,0)                            # look down at your blob! 
 
-        filters = CommonFilters(self.win, self.cam)         # bloom/glow
-        filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
+        #filters = CommonFilters(self.win, self.cam)         # bloom/glow
+        #filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
 
         self.taskMgr.add(self.update, "update")
         # TODO spacial partitioning
@@ -450,10 +397,8 @@ class GameBase(ShowBase):
         print("="*20 + " See you soon!:) " + 20*"=")
 
 if __name__ == "__main__":
-    print("="*20 + " Welcome to blobstim! " + 20*"=")
+    print("="*20 + " Welcome to microworld! v0.0.1 " + 20*"=")
     base = GameBase()                                       # Showbase initialised
-
-    # simplepbr.init(use_330=True)
 
     hp_ball_pos_1 = Vec3(-4,0,0)
     hp_ball_pos_2 = Vec3(3,-2,0)
@@ -470,8 +415,3 @@ if __name__ == "__main__":
                                     pos=food_ball_pos_2, sfx=food_ball_sfx))
 
     base.run()                                              # taskMgr blocks
-
-# self.velocity -= Vec3(0,0,.1) * globalClock.getDt()               # gravity
-# if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check
-#     self.velocity = -self.velocity* .979
-# self.nodepath.set_pos(self.blob.pos.x,self.blob.pos.y, pos.z + self.velocity.z)

@@ -38,13 +38,16 @@ blobPrim.closePrimitive()
 # vtx_format = GeomVertexFormat.getV3n3c4()
 vtx_format  = GeomVertexFormat()
 arrayFormat = GeomVertexArrayFormat()
-arrayFormat.add_column(InternalName.get_vertex(),3,GeomEnums.NT_float32, GeomEnums.C_point)
+arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
 vtx_format.add_array(arrayFormat)
 arrayFormat = GeomVertexArrayFormat()
 arrayFormat.add_column(InternalName.get_normal(),3,GeomEnums.NT_float32, GeomEnums.C_point)
 vtx_format.add_array(arrayFormat)
 arrayFormat = GeomVertexArrayFormat()
 arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_uint8, GeomEnums.C_color)
+vtx_format.add_array(arrayFormat)
+arrayFormat = GeomVertexArrayFormat()
+arrayFormat.add_column("basis",2,GeomEnums.NT_float32, GeomEnums.C_point)
 vtx_format.add_array(arrayFormat)
 vtx_format  = GeomVertexFormat.register_format(vtx_format)
 vtx_data    = GeomVertexData('blob_verts', vtx_format, Geom.UHStatic)
@@ -53,18 +56,17 @@ vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 print("-- Formats registered. Creating geometry...")
 
 # open memoryviews to write position, normal, and colour data to VBO
-pos_view  = memoryview(vtx_data.modify_array(0)).cast('B')
-norm_view = memoryview(vtx_data.modify_array(1)).cast('B')
-col_view  = memoryview(vtx_data.modify_array(2)).cast('B')
+pos_view   = memoryview(vtx_data.modify_array(0)).cast('B')
+norm_view  = memoryview(vtx_data.modify_array(1)).cast('B')
+col_view   = memoryview(vtx_data.modify_array(2)).cast('B')
+basis_view = memoryview(vtx_data.modify_array(3)).cast('B')
 
 vtx_vals = bytearray()
+basis_vals = bytearray()
 for i in range(13):
     # generate circular layout with basis vectors
-    vtx_vals.extend(struct.pack(
-        '3f',
-        BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0.))
-# pack values into memoryview
-pos_view[:] = vtx_vals
+    vtx_vals.extend(struct.pack('4f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0., 1.))
+    basis_vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
 
 # now generate and pack the normals and colours the same way
 norm_vals = bytearray()
@@ -72,8 +74,12 @@ col_vals  = bytearray()
 for _ in range(13):
     norm_vals.extend(struct.pack('3f', 0.,0.,1.))
     col_vals.extend(struct.pack('4B', 255, 255, 255, 255))
+
+# write to VBO
+pos_view[:] = vtx_vals
 norm_view[:] = norm_vals
 col_view[:]  = col_vals
+basis_view[:] = basis_vals
 
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
 geom = Geom(vtx_data)

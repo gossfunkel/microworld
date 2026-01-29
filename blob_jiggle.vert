@@ -12,7 +12,7 @@ in vec2 basis;
 
 //UBO for velocities
 layout (std430, binding = 0) buffer vel_ssbo { 
-    vec2 velocities[12]; 
+    vec2 velocities[]; 
 };
 
 const float EPSILON = 0.00001;
@@ -104,8 +104,6 @@ void main() {
     uint vtx = gl_VertexID;
     vec4 new_pos;
     if (vtx != 0) {
-        vec2 vel = velocities[vtx].xy;
-
         // get model and vertex position in world-space
         vec2 centrepoint = vec4(vec4(0.,0.,0.,1.)*p3d_ModelMatrix).xy;
         vec2 vtx_world = vec4(p3d_Vertex * p3d_ModelMatrix).xy;
@@ -114,20 +112,22 @@ void main() {
         vec2 desire_vtx = centrepoint + basis.xy * radius;
 
         // calculate new position and vel in 2D world-space
-        vec4 sho_out = SHO(vtx_world, 
-                      vel, 
+        /*vec4 sho_out = SHO(vtx_world, 
+                      velocities[vtx], 
                       desire_vtx, 
                       osg_DeltaFrameTime,
                       10.);
-        new_pos = vec4(sho_out.xy, 0., 1.);
-        //vec4 new_pos = vec4(desire_vtx, 0., 1.);
-        // write velocity to vel buffer
-        velocities[vtx] = sho_out.zw;
+        new_pos = vec4(sho_out.xy, 0., 1.);*/
+        new_pos = vec4(desire_vtx, 0., 1.);
+        // write velocity to vel buffer (FIXME relativity??)
+        //velocities[vtx] = sho_out.zw;
+        velocities[vtx-1] = vec2(0.);
         // convert new position to model space and save to VBO
-        p3d_Vertex = inverse(p3d_ModelMatrix) * new_pos;
+        //p3d_Vertex = inverse(p3d_ModelMatrix) * new_pos;
     } else {
         // centrepoint experiences no physics
         new_pos = p3d_Vertex * p3d_ModelMatrix;
+        //p3d_Vertex = new_pos;
     }
     // calculate gl_Position with the new position and remaining matrices
     gl_Position = p3d_ViewProjectionMatrix * new_pos;

@@ -309,30 +309,29 @@ class Blob:
 
     def update(self, task):
         # TODO move the procedural animation to a vertex shader (collisions??)
-        vtx_view_f32 = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
+        vtx_view = memoryview(self.vtx_data.modify_array(0)).cast('3f')
 
         # the vertex at the centre of the blob
-        centrepoint: Vec2 = Vec2(vtx_view_f32[0],vtx_view_f32[1])
+        centrepoint: Vec2 = vtx_view[0].xy
 
         # naive collision check with items - TODO spacial hashing
         for item in base.floating_items:
-            if ABS_DIST(Vec3(centrepoint.xy, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
+            if ABS_DIST(Vec3(centrepoint, 0), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
                 self.add_ball(item)
                 base.floating_items.remove(item)
 
         # calculate internal blob forces
         for vtx in range(12):
+            pos: Vec2 = vtx_view[vtx].xy
             vel: Vec2 = self.velocities[vtx]
             dt: float = globalClock.getDt()
             vtx += 1
             basis: Vec2 = Vec2(BASIS_VECS[vtx*2], BASIS_VECS[vtx*2+1])
-            vtx *= 3
 
-            pos: Vec2 = Vec2(vtx_view_f32[vtx], vtx_view_f32[vtx+1])
 
             sprungPos, vel = SHO(pos,vel,centrepoint+basis*self.radius,dt,10.)
             pos = sprungPos + vel*dt
-            self.velocities[int(vtx/3-1)] = vel
+            self.velocities[int(vtx-1)] = vel
 
             # TODO modify movement based on collisions
             #if self.colliding:
@@ -340,9 +339,9 @@ class Blob:
 
             assert not np.isnan(pos.x), f'X POSITION IS NAN; SEGFAULT MAY OCCUR'
             assert not np.isnan(pos.y), f'Y POSITION IS NAN; SEGFAULT MAY OCCUR'
-            vtx_view_f32[vtx]   = pos.x if not np.isnan(pos.x) else 0
-            vtx_view_f32[vtx+1] = pos.y if not np.isnan(pos.y) else 0
-            vtx_view_f32[vtx+2] = 0. # pos.z
+            vtx_view[vtx].x = pos.x if not np.isnan(pos.x) else 0
+            vtx_view[vtx].y = pos.y if not np.isnan(pos.y) else 0
+            vtx_view[vtx].z = 0. # pos.z
 
         self.spinner += (globalClock.getDt())%360
         return task.cont
