@@ -11,16 +11,23 @@ uniform float osg_DeltaFrameTime;
 in vec4 p3d_Color;
 in vec2 basis;*/
 
+struct P3d_data {
+    vec4 pos;                       // 4x 8B
+    vec3 normal;                    // 3x 8B
+    vec4 colour;                    // 4x 8B
+};                                  //  = 88B x 13
+
+struct Custom_data {
+    float size;                     // 1x 8B
+    vec2 basis;                     // 2x 8B
+    vec2 vel;                       // 2x 8B
+};                                  //  = 40B x 13
+
 // SSBO for vertex pulling
 layout (std430, binding = 0) buffer ssbo { 
-    vec4 p3d_Vertex[13]; // 4x 8B
-    vec3 p3d_Normal[13]; // 3x 8B
-    float size[13];      // 1x 8B
-    uvec4 p3d_Color[13]; // 4x 8B
-    vec2 basis[13];      // 2x 8B
-    vec2 velocity[13];   // 2x 8B
-                         //  = 128Bytes
-};
+    P3d_data p3d_data[13];          //  = 88B x 13
+    Custom_data vtx_data[13];       //  = 40B x 13
+};                                  // == 128B x 13 = 1664B buffer
 
 const float EPSILON = 0.0001;
 const float DAMP_RATIO = .6;              // sets springyness of object
@@ -108,32 +115,32 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 
 void main() {
     uint vtx = gl_VertexID;
-    col = p3d_Color[vtx];
+    col = p3d_data[vtx].colour;
     vec4 new_pos;
     if (vtx != 0) {
         // get vertex position in world-space
         vec2 centrepoint = vec4(p3d_ModelMatrix * vec4(0.,0.,0.,1.)).xy;
-        vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_Vertex[vtx]).xy;
+        vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_data[vtx].pos).xy;
 
         // calculate equilibrium pos in world-space
-        vec2 desire_vtx = centrepoint + basis[vtx].xy * radius;
+        vec2 desire_vtx = centrepoint + vtx_data[vtx].basis * radius;
 
         // calculate new position and vel in 2D world-space
         vec4 sho_out = SHO(vtx_world, 
-                      velocity[vtx], 
+                      vtx_data[vtx].vel, 
                       desire_vtx, 
                       osg_DeltaFrameTime,
                       10.);
         new_pos = vec4(sho_out.xy, 0., 1.);// *  inverse(p3d_ModelMatrix);
 
         // write output to buffers (FIXME relativity??)
-        velocity[vtx] = sho_out.zw;
+        vtx_data[vtx].vel = sho_out.zw;
     } else {
         // centrepoint experiences no physics - just move basis to world-space
-        new_pos = p3d_ModelMatrix * vec4(basis[vtx],0.,1.);
+        new_pos = p3d_ModelMatrix * vec4(vtx_data[0].basis,0.,1.);
     }
     
-    p3d_Vertex[vtx] = inverse(p3d_ModelMatrix) * new_pos;
+    p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     // calculate gl_Position with the new position and remaining matrices
     gl_Position = p3d_ViewProjectionMatrix * new_pos;
 }

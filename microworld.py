@@ -144,16 +144,18 @@ class Blob:
         # make an SSBO from the model data for vertex pulling
         byte_data = bytearray()
         p3d_array = vtx_data.get_array_handle(0).get_data()
-        stride_0 = 88
-        cust_array = vtx_data.get_array_handle(1).get_data()
-        stride_1 = 40
-        for i in range(self.verts+1):
-            byte_data.extend(p3d_array[i*stride_0    :i*stride_0+32])    # pos
-            byte_data.extend(p3d_array[i*stride_0+32 :i*stride_0+56])    # norm
-            byte_data.extend(cust_array[i*stride_1   :i*stride_1+8])     # size (pad)
-            byte_data.extend(p3d_array[i*stride_0+56          :i*stride_0+88])    # col
-            byte_data.extend(cust_array[i*stride_1+8 :i*stride_1+24])    # basis
-            byte_data.extend(cust_array[i*stride_1+24:i*stride_1+40])    # vel
+        # stride_0 = 88
+        custom_array = vtx_data.get_array_handle(1).get_data()
+        byte_data.extend(p3d_array)
+        byte_data.extend(custom_array)
+        # stride_1 = 40
+        # for i in range(self.verts+1):
+        #     byte_data.extend(p3d_array[i*stride_0      :i*stride_0+32])    # pos
+        #     byte_data.extend(p3d_array[i*stride_0+32   :i*stride_0+56])    # norm
+        #     byte_data.extend(custom_array[i*stride_1   :i*stride_1+8])     # size (pad)
+        #     byte_data.extend(p3d_array[i*stride_0+56   :i*stride_0+88])    # col
+        #     byte_data.extend(custom_array[i*stride_1+8 :i*stride_1+24])    # basis
+        #     byte_data.extend(custom_array[i*stride_1+24:i*stride_1+40])    # vel
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
         # node = GeomNode(f"{self.name}_geom")
