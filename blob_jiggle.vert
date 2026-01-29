@@ -13,13 +13,13 @@ in vec2 basis;*/
 
 // SSBO for vertex pulling
 layout (std430, binding = 0) buffer ssbo { 
-    // 11 float32s and 4 int8s - 384b; 12 * scalar (4 bits)
-    vec4 p3d_Vertex[13];
-    vec3 p3d_Normal[13];
-    float size[13];
-    uvec4 p3d_Color[13];
-    vec2 basis[13];
-    vec2 velocity[13]; 
+    vec4 p3d_Vertex[13]; // 4x 8B
+    vec3 p3d_Normal[13]; // 3x 8B
+    float size[13];      // 1x 8B
+    uvec4 p3d_Color[13]; // 4x 8B
+    vec2 basis[13];      // 2x 8B
+    vec2 velocity[13];   // 2x 8B
+                         //  = 128Bytes
 };
 
 const float EPSILON = 0.0001;

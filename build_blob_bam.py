@@ -68,8 +68,8 @@ for i in range(13):
 view[:] = vals
 
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
-geom = Geom(vtx_data)
-blobPrim    = GeomTrifans(Geom.UHStatic)
+geom     = Geom(vtx_data)
+blobPrim = GeomTrifans(Geom.UHStatic)
 blobPrim.add_consecutive_vertices(0,13)
 blobPrim.add_vertex(1)
 blobPrim.closePrimitive()
