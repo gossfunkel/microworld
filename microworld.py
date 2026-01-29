@@ -54,7 +54,10 @@ win-size 1200 800
 show-frame-rate-meter 1
 hardware-animated-vertices true
 framebuffer-srgb true
+//framebuffer-float true
+//color-bits 128
 basic-shaders-only false
+//gl-interleaved-arrays true
 //framebuffer-multisample true
 //multisamples 2
 //threading-model Cull/Draw
@@ -128,7 +131,7 @@ class Blob:
 
         # load the default blob from file
         self.nodepath = loader.loadModel("blob_default.bam")
-        self.nodepath.set_color(Vec4(col, 255))
+        self.nodepath.set_color(Vec4(col, 1.))
 
         # modify geom vertex data from file
         vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
@@ -144,11 +147,11 @@ class Blob:
         # make an SSBO from the model data for vertex pulling
         byte_data = bytearray()
         p3d_array = vtx_data.get_array_handle(0).get_data()
-        # stride_0 = 88
+        # stride_0 = 48
         custom_array = vtx_data.get_array_handle(1).get_data()
         byte_data.extend(p3d_array)
         byte_data.extend(custom_array)
-        # stride_1 = 40
+        # stride_1 = 16
         # for i in range(self.verts+1):
         #     byte_data.extend(p3d_array[i*stride_0      :i*stride_0+32])    # pos
         #     byte_data.extend(p3d_array[i*stride_0+32   :i*stride_0+56])    # norm
@@ -346,8 +349,8 @@ class GameBase(ShowBase):
         big_light_np.setHpr(20, -80, 0)
         render.setLight(big_light_np)                     # set a warm directional light on the whole scene
 
-        self.p1 = Blob("p1",Vec2(0.,-5.),(0,0,255), 200)  # create a test blob
-        self.p2 = Blob("p2",Vec2(0., 5.),(0,255,0), 300)  # create a second test blob
+        self.p1 = Blob("p1",Vec2(0.,-5.),(0.,0.,1.), 200)  # create a test blob
+        self.p2 = Blob("p2",Vec2(0., 5.),(0.,1.,0.), 300)  # create a second test blob
 
         self.p1_label = TextNode("p1 balls: ")
         self.p1_label.setTextColor(1,1,1,1)

@@ -1,8 +1,8 @@
 #version 430
 
-//uniform mat4 p3d_ModelViewProjectionMatrix;
-uniform mat4 p3d_ViewProjectionMatrix;
-uniform mat4 p3d_ModelMatrix;
+uniform mat4 p3d_ModelViewProjectionMatrix;
+//uniform mat4 p3d_ViewProjectionMatrix;
+//uniform mat4 p3d_ModelMatrix;
 //uniform float4x4 trans_world_to_blob;
 uniform float osg_DeltaFrameTime;
 
@@ -12,25 +12,24 @@ in vec4 p3d_Color;
 in vec2 basis;*/
 
 struct P3d_data {
-    vec4 pos;                       // 4x 8B
-    vec3 normal;                    // 3x 8B
-    vec4 colour;                    // 4x 8B
-};                                  //  = 88B x 13
+    vec4 pos;                       // 4x 4B
+    vec4 normal;                    // 4x 4B
+    vec4 colour;                    // 4x 4B
+};                                  //  = 48B
 
 struct Custom_data {
-    float size;                     // 1x 8B
-    vec2 basis;                     // 2x 8B
-    vec2 vel;                       // 2x 8B
-};                                  //  = 40B x 13
+    vec2 basis;                     // 2x 4B
+    vec2 vel;                       // 2x 4B
+};                                  //  = 16B
 
 // SSBO for vertex pulling
 layout (std430, binding = 0) buffer ssbo { 
-    P3d_data p3d_data[13];          //  = 88B x 13
-    Custom_data vtx_data[13];       //  = 40B x 13
-};                                  // == 128B x 13 = 1664B buffer
+    P3d_data p3d_data[13];          //  = 48B x 13
+    Custom_data vtx_data[13];       //  = 16B x 13
+};                                  // == 64B x 13 = 832B buffer
 
 const float EPSILON = 0.0001;
-const float DAMP_RATIO = .6;              // sets springyness of object
+const float DAMP_RATIO = .3;              // sets springyness of object
 //const float DIST_EDGEPOINTS = .51;        // hopefully should be compatible with the radius
 uniform float radius;
 
@@ -118,29 +117,35 @@ void main() {
     col = p3d_data[vtx].colour;
     vec4 new_pos;
     if (vtx != 0) {
-        // get vertex position in world-space
-        vec2 centrepoint = vec4(p3d_ModelMatrix * vec4(0.,0.,0.,1.)).xy;
-        vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_data[vtx].pos).xy;
+        // get the 2D vertex position in world-space
+        //vec2 centrepoint = vec4(p3d_ModelMatrix * vec4(0.,0.,0.,1.)).xy;
+        //vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_data[vtx].pos).xy;
+        // get the 2D vertex position in model-space
+        vec2 vtx_mod = p3d_data[vtx].pos.xy;
 
-        // calculate equilibrium pos in world-space
-        vec2 desire_vtx = centrepoint + vtx_data[vtx].basis * radius;
+        // calculate equilibrium pos in model-space
+        //vec2 world_basis = vec4(p3d_ModelMatrix * vec4(vtx_data[vtx].basis,0.,1.)).xy;
+        //vec2 desire_vtx = centrepoint + world_basis * radius;
+        vec2 desire_vtx = vtx_data[vtx].basis * radius;
 
-        // calculate new position and vel in 2D world-space
-        vec4 sho_out = SHO(vtx_world, 
+        // calculate new position and vel in 2D model-space
+        vec4 sho_out = SHO(vtx_mod, 
                       vtx_data[vtx].vel, 
                       desire_vtx, 
                       osg_DeltaFrameTime,
                       10.);
-        new_pos = vec4(sho_out.xy, 0., 1.);// *  inverse(p3d_ModelMatrix);
+        new_pos = vec4(sho_out.xy, 0., 1.);
 
         // write output to buffers (FIXME relativity??)
         vtx_data[vtx].vel = sho_out.zw;
+        //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
+        p3d_data[vtx].pos = new_pos;
     } else {
-        // centrepoint experiences no physics - just move basis to world-space
-        new_pos = p3d_ModelMatrix * vec4(vtx_data[0].basis,0.,1.);
+        // centrepoint experiences no physics
+        new_pos = vec4(vtx_data[0].basis,0.,1.);
+        //p3d_data[vtx].pos = vec4(vtx_data[0].basis,0.,1.);
     }
     
-    p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     // calculate gl_Position with the new position and remaining matrices
-    gl_Position = p3d_ViewProjectionMatrix * new_pos;
+    gl_Position = p3d_ModelViewProjectionMatrix * new_pos;
 }
