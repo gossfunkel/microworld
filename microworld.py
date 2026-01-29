@@ -5,7 +5,7 @@ from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
     GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture, TextNode, Thread, Shader
+    TextureStage, Texture, TextNode, Thread, Shader, ShaderBuffer
 )
 import numpy as np
 from enum import Enum
@@ -70,7 +70,7 @@ def GEN_PRIMS_FORMAT():
     #vtx_format = GeomVertexFormat.getV3n3c4()
     vtx_format = GeomVertexFormat()
     arrayFormat = GeomVertexArrayFormat()
-    arrayFormat.add_column(InternalName.get_vertex(),3,GeomEnums.NT_float32, GeomEnums.C_point)
+    arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
     vtx_format.add_array(arrayFormat)
     arrayFormat = GeomVertexArrayFormat()
     arrayFormat.add_column(InternalName.get_normal(),3,GeomEnums.NT_float32, GeomEnums.C_point)
@@ -145,9 +145,6 @@ class Blob:
         # TODO move data into C++ obj tags or VBO
         self.type = type
         self.name = name
-        # TODO keeping the nodepath at 0,0,0 causes culling issues. 
-        #       but using it causes matrices to cause drift issues
-        self.pos = Vec3(pos,0)
         self.col: tuple   = col
         self.radius: float  = 1.
         self.verts: int   = 12
@@ -167,9 +164,9 @@ class Blob:
         # generate circular layout with basis vectors and populate array with structs
         for i in range(13):
             vtx_vals.extend(struct.pack(
-                '3f',
-                pos.x+BASIS_VECS[i*2]*self.radius, pos.y+BASIS_VECS[i*2+1]*self.radius, 0.))
-            basis_vals.extend(struct.pack('3f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
+                '4f',
+                pos.x+BASIS_VECS[i*2]*self.radius, pos.y+BASIS_VECS[i*2+1]*self.radius, 0., 0.))
+            basis_vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
 
         # now generate and pack the normals and colours the same way
         norm_vals  = bytearray()
@@ -192,8 +189,8 @@ class Blob:
 
         # create a new node and attach to base.render
         self.nodepath = base.render.attach_new_node(self.geom_node)
-        # store position in the node FIXME currently nodepath pos must stay at origin for the world matrix
-        #self.nodepath.set_pos(pos.x, pos.y, 0)
+        # store position in the node 
+        self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
         self.nodepath.setDepthOffset(1)
 
@@ -203,12 +200,12 @@ class Blob:
         self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
         self.num_balls: int = len(self.balls)               # to help with angle calculations
 
-        # start at rest
+        # create array of velocities and construct a VBO
         self.velocities = np.array([Vec2(0.,0.) for _ in range(12)], dtype=np.float32)
-        self.vel_buffer = ShaderBuffer("vel_ubo", self.velocities.tobytes(), GeomEnums.UHDynamic)
+        self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
 
         # activate the jiggle shader on the blob
-        self.nodepath.set_shader(Shader(vertex="blob_jiggle.vert"))
+        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
         self.nodepath.set_shader_input("velocities", self.vel_buffer)
         self.nodepath.set_shader_input("radius", self.radius)
         #self.nodepath.setShaderAuto()
@@ -290,7 +287,7 @@ class Ball:
         self.type  = type
         self.name  = name
         self.blob  = blob            # blob that ball is attached to, if any
-        self.index = index          # helps balls rotate on the blobs neatly
+        self.index = index          #s helps balls rotate on the blobs neatly
         self.sfx   = sfx            # associated noise
         self.radius: float = .15    # personal space
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
@@ -441,7 +438,7 @@ class GameBase(ShowBase):
 
     # camera follows p1
     def update(self, task):
-        self.cam.setPos(self.p1.pos + CAM_POS)
+        self.cam.setPos(self.p1.pos() + CAM_POS)
         # print(f"blobpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
 
         # update UI
@@ -454,7 +451,7 @@ class GameBase(ShowBase):
 
 if __name__ == "__main__":
     print("="*20 + " Welcome to blobstim! " + 20*"=")
-    base = GameBase()                               # Showbase initialised
+    base = GameBase()                                       # Showbase initialised
 
     # simplepbr.init(use_330=True)
 
@@ -472,7 +469,7 @@ if __name__ == "__main__":
     base.floating_items.append(Ball(BallType.FOOD, f"ball-{len(base.floating_items)}", 
                                     pos=food_ball_pos_2, sfx=food_ball_sfx))
 
-    base.run()                                      # taskMgr blocks
+    base.run()                                              # taskMgr blocks
 
 # self.velocity -= Vec3(0,0,.1) * globalClock.getDt()               # gravity
 # if ((pos + self.velocity).z < (self.blob.pos.z+self.radius)):     # collision check

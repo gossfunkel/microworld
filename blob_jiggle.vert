@@ -1,15 +1,21 @@
 #version 430
 
-uniform mat4 p3d_ModelViewProjectionMatrix;
+uniform mat4 p3d_ViewProjectionMatrix;
 uniform mat4 p3d_ModelMatrix;
-uniform float4x4 trans_world_to_blob;
+//uniform float4x4 trans_world_to_blob;
 uniform float osg_DeltaFrameTime;
 
 in vec4 p3d_Vertex;
 in vec2 basis;
 
-// UBO for velocities
-layout (std430, binding = 0) uniform vel_ubo { vec2 velocities[]; };
+/* UBO for velocities
+layout (std430, binding = 0) buffer vel_ssbo { 
+    vec2 velocities[12]; 
+};
+layout (std430, binding = 1) buffer vbo {
+    vec4 vertex[13];
+    vec3 
+}*/
 
 const float EPSILON = 0.00001;
 const float DAMP_RATIO = .3;              // sets springyness of object
@@ -34,7 +40,7 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
         if (DAMP_RATIO > 1. + EPSILON) {
             // overdamped formula
             float za = -angularFreq * DAMP_RATIO;
-            float zb = angularFreq * sqrt(DAMP_RATIO*DAMP_RATIO - 1.);
+            float zb = angularFreq * sqrt(abs(DAMP_RATIO*DAMP_RATIO - 1.));
             float z1 = za - zb;
             float z2 = za + zb;
 
@@ -94,14 +100,13 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 }
 
 void main() {
-    // FIXME does this variable exist?
-    uint vtx = gl_Vertex_ID;
-
+    /*
+    uint vtx = gl_VertexID;
     vec2 vel = velocities[vtx].xy;
 
     // get model and vertex position in world-space
-    vec2 centrepoint = vec3(vec3(0.,0.,0.)*p3d_ModelMatrix).xy;
-    vec2 vtx_world = vec3(p3d_Vertex * p3d_ModelMatrix).xy;
+    vec2 centrepoint = vec3(vec4(0.,0.,0.,0.)*p3d_ModelMatrix).xy;
+    vec2 vtx_world = vec4(p3d_Vertex * p3d_ModelMatrix).xy;
 
     // calculate equilibrium pos in world-space
     vec2 desire_vtx = centrepoint + basis.xy * radius;
@@ -112,11 +117,12 @@ void main() {
                   desire_vtx, 
                   osg_DeltaFrameTime,
                   10.);
-    vec3 new_pos = vec3(sho_out.xy, 0.);
+    vec4 new_pos = vec4(sho_out.xy, 0., 0.);
     // write velocity to vel buffer
     velocities[vtx] = sho_out.zw;
     // convert new position to model space and save to VBO
-    gl_Vertex = -p3d_ModelMatrix * new_pos;
+    p3d_Vertex = inverse(p3d_ModelMatrix) * new_pos;*/
+    vec4 new_pos = p3d_ModelMatrix * p3d_Vertex;
     // calculate gl_Position with the new position and remaining matrices
     gl_Position = p3d_ViewProjectionMatrix * new_pos;
 }
