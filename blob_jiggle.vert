@@ -32,8 +32,9 @@ const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
 //const float DIST_EDGEPOINTS = .51;        // hopefully should be compatible with the radius
 uniform float radius;
+uniform vec4 col;
 
-out vec4 col;
+out vec4 v_col;
 
 vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angularFreq) {
     // SHM angular frequency parameter must be positive!
@@ -114,7 +115,7 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 
 void main() {
     uint vtx = gl_VertexID;
-    col = p3d_data[vtx].colour;
+    v_col = p3d_data[vtx].colour * col;
     vec4 new_pos;
     if (vtx != 0) {
         // get the 2D vertex position in world-space

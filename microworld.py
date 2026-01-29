@@ -120,7 +120,7 @@ class SoundFX:
 
 # a PC. cell-like blobby guy that blobs about
 class Blob:
-    def __init__(self, name: str, pos: Vec2, col: tuple, bong_freq: float) -> None:
+    def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
         self.type           = type
         self.name           = name
@@ -131,7 +131,7 @@ class Blob:
 
         # load the default blob from file
         self.nodepath = loader.loadModel("blob_default.bam")
-        self.nodepath.set_color(Vec4(col, 1.))
+        self.nodepath.set_color(col)
 
         # modify geom vertex data from file
         vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
@@ -173,6 +173,7 @@ class Blob:
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
         self.nodepath.set_shader_input("ssbo", self.buffer)
         self.nodepath.set_shader_input("radius", self.radius)
+        self.nodepath.set_shader_input("col", self.col)
         #self.nodepath.setShaderAuto()
 
         # now set up accessories
@@ -349,8 +350,8 @@ class GameBase(ShowBase):
         big_light_np.setHpr(20, -80, 0)
         render.setLight(big_light_np)                     # set a warm directional light on the whole scene
 
-        self.p1 = Blob("p1",Vec2(0.,-5.),(0.,0.,1.), 200)  # create a test blob
-        self.p2 = Blob("p2",Vec2(0., 5.),(0.,1.,0.), 300)  # create a second test blob
+        self.p1 = Blob("p1",Vec2(0.,-5.),Vec4(0.,0.,1.,1.), 200)  # create a test blob
+        self.p2 = Blob("p2",Vec2(0., 5.),Vec4(0.,1.,0.,1.), 300)  # create a second test blob
 
         self.p1_label = TextNode("p1 balls: ")
         self.p1_label.setTextColor(1,1,1,1)
