@@ -86,13 +86,12 @@ class SoundFX:
         self.bongs.append(base.loader.loadSfx(bong_audio_buff))                 # load buffer to bongs list
         return len(self.bongs)-1                                                # return index of bong
 
-    def add_brrp(self, length=3500) -> int:
+    def add_brrp(self, length=3200) -> int:
         freq_scale: float = length / 48000                                      # translate length into seconds
         atk: np.array = np.linspace(0,1,2500, dtype=np.float32)                 # ascending attack
         dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
         env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
         amp: float    = .2
-        # TODO chop into little bits
         BRRP_SAMPLE = np.array(chirp(np.linspace(0,1,length,endpoint=False),    # return value from scipy.signal.chirp with our parameters
                                      f0=450,
                                      f1=1000, 
@@ -144,12 +143,12 @@ class Blob:
 
         # create array of velocities and construct a VBO
         self.velocities = np.array([Vec2(0.,0.) for _ in range(12)], dtype=np.float32)
-        #self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
+        self.vel_buffer = ShaderBuffer("vel_ssbo", self.velocities.tobytes(), GeomEnums.UHDynamic)
 
         # activate the jiggle shader on the blob
-        #self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
-        #self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
-        #self.nodepath.set_shader_input("radius", self.radius)
+        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
+        self.nodepath.set_shader_input("vel_ssbo", self.vel_buffer)
+        self.nodepath.set_shader_input("radius", self.radius)
         #self.nodepath.setShaderAuto()
 
         base.taskMgr.add(self.update, str(name)+"-update")
@@ -162,7 +161,7 @@ class Blob:
 
     def grow(self):
         self.radius *= 1.1                                    # make the blob bigger
-        #self.nodepath.set_shader_input("radius", self.radius) # update the shader
+        self.nodepath.set_shader_input("radius", self.radius) # update the shader
 
     def add_ball(self, ball=None, balls: int = 1):
         # print(f"adding ball to {self.name}")
@@ -245,7 +244,6 @@ class Ball:
         model.setTransparency(1)
         ts_col = TextureStage('ts_col')
         model.setTexture(ts_col, loader.loadTexture(self.type.value))
-        # model.set_color(Vec4(self.blob.col, 1))
         ts_glow = TextureStage('ts_glow')
         ts_glow.setMode(TextureStage.MGlow)
         black_tex = loader.loadTexture("black.png")
@@ -308,10 +306,10 @@ class Ball:
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
-        #self.set_background_color(0,0,0,1)                # dark background
+        self.set_background_color(0.12,0.05,0.22,1.)                # dark background
 
         render.setAntialias(AntialiasAttrib.MAuto)        # set global antialiasing
-        render.setShaderAuto()
+        #render.setShaderAuto()
 
         self.sfx = SoundFX()                              # initialise sound effect library
 
