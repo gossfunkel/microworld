@@ -56,7 +56,7 @@ hardware-animated-vertices true
 framebuffer-srgb true
 basic-shaders-only false
 //framebuffer-multisample true
-//multisamples 4
+//multisamples 2
 //threading-model Cull/Draw
 """
 loadPrcFileData("", CONFIG)
@@ -122,7 +122,7 @@ class Blob:
         self.type           = type
         self.name           = name
         self.col: tuple     = col
-        self.radius: float  = 1.
+        self.radius: float  = 2.
         self.verts: int     = 12
         self.colliding      = False
 
@@ -134,6 +134,8 @@ class Blob:
         self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
         self.nodepath.setDepthOffset(1)
+
+        # TODO modify basis vecs by radius
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq)  # generate sound effect at given freq
@@ -155,12 +157,13 @@ class Blob:
 
         print(f"== blob {name} created!")
 
-    # getter to make this quicker
+    # alias to make this quicker
     def pos(self) -> Vec3:
         return self.nodepath.get_pos()
 
     def grow(self):
         self.radius *= 1.1                                    # make the blob bigger
+        # TODO update the basis vecs
         self.nodepath.set_shader_input("radius", self.radius) # update the shader
 
     def add_ball(self, ball=None, balls: int = 1):
@@ -198,7 +201,7 @@ class Blob:
     def update(self, task):
         # processor-killing debug
         #print(f"blob {self.name} nodepath position: {self.pos()}")
-        #vtx_view = memoryview(self.vtx_data.modify_array(0)).cast('B').cast('f')
+        #vtx_view = memoryview(self.nodepath.node().get_vertex_data().modify_array(0)).cast('B').cast('f')
         #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
         # naive collision check with items - TODO spacial hashing
@@ -210,9 +213,8 @@ class Blob:
         self.spinner += (globalClock.getDt())%360
         return task.cont
 
-    # move the blob by its centrepoint
+    # move the blob by its nodepath.pos
     def move(self, direction):
-        #print(self.view[1].to_bytes())
         pos = self.pos()
         match direction:
             case "left":                        # go left
@@ -378,8 +380,7 @@ class GameBase(ShowBase):
         #filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
 
         self.taskMgr.add(self.update, "update")
-        # TODO spacial partitioning
-        # self.taskMgr.add(self.update_space, "update_space")
+        # TODO spacial partitioning 
 
     # camera follows p1
     def update(self, task):
