@@ -126,8 +126,8 @@ void main() {
         // get change in origin position 
         //vec2 model_speed = vtx_data[0].vel;
 
-        // calculate current vertex position in model-space
-        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+        // calculate vertex position relative to centrepoint after movement
+        //vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
 
         // calculate where potential minimum is for vertex based on relative displacement of centrepoint over dt
         // desire position = relative-centrepoint-pos + basis-vector-to-centrepoint * radius

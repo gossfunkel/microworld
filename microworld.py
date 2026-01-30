@@ -234,7 +234,7 @@ class Blob:
     # move the blob by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
-        gsg = base.win.get_gsg()
+        #gsg = base.win.get_gsg()
         match direction:
             case "left":             # go left              SSBO         GSG  NEW_VEL     OFFSET (array 1 row 0 col 1: 48+8= 56B)
                 self.velocity -=  Vec2(.05,0.)
