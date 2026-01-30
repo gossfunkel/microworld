@@ -1,25 +1,36 @@
 #version 430
 
+// constants
+const float EPSILON = 0.0001;             // a very small amount
+const float DAMP_RATIO = .3;              // sets springyness of object
+
+// uniform shader inputs
+uniform float radius;                     // input radius of blob
+uniform vec2 model_velocity;              // input velocity of blob
 uniform float osg_DeltaFrameTime;
 
+// buffers:
 struct P3d_data {
     vec4 pos;                       // 4x 4B
     vec4 normal;                    // 4x 4B
     vec4 colour;                    // 4x 4B
     vec2 basis;                     // 2x 4B
     vec2 vel;                       // 2x 4B
-};                                  //  = 16 * 4B = 64B
+};                              //  = 16x 4B = 64B
 
 // SSBO containing vertex data as above struct
 layout (std430, binding = 0) buffer ssbo { 
-    P3d_data p3d_data[13];          //  = 48B x 13
-    //Custom_data vtx_data[13];       //  = 16B x 13
-};                                  // == 64B x 13 = 832B buffer
+    P3d_data p3d_data[13];          // 13x 64B
+};                                  //  = 832B buffer
 
-const float EPSILON = 0.0001;
-const float DAMP_RATIO = .3;              // sets springyness of object
-uniform float radius;
-uniform vec2 model_velocity;
+// write access to the VBO - TODO FIXME this is a sketch, i have no idea how i should access this
+layout (std430, binding = 1) writeonly vbo {
+    struct VboData {
+        p3d_Vertex
+        p3d_Normal
+        p3d_Color
+    } vbo_data[13];
+};
 
 vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angularFreq) {
     // SHM angular frequency parameter must be positive!
@@ -132,10 +143,13 @@ void main() {
 
         // write output to buffers (FIXME relativity??)
         vtx_data[vtx].vel = sho_out.zw;
-        */ new_pos = vec4(desire_vtx,0.,1.);
+        */ 
+
+        // for testing- just keep it circular
+        new_pos = vec4(desire_vtx,0.,1.);
         //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     } 
     
     // write vertex pos with the new position and remaining matrices
-    p3d_Vertex[vtx] = new_pos;
+    p3d_Vertex = new_pos;
 }
