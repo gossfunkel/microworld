@@ -2,7 +2,7 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName,
-    Shader, ShaderBuffer
+    Shader, ShaderBuffer, ComputeNode
 )
 import struct
 import numpy as np
@@ -105,6 +105,15 @@ for i in range(13):
 view[:] = vals
 buffer = ShaderBuffer("ssbo", bytes(vals), GeomEnums.UHDynamic)
 
+# set up the compute node to calculate the vertex positions
+comp_node = ComputeNode("blob_anim")
+comp_node.add_dispatch(1, 1, 1)
+comp_np = base.render.attach_new_node(comp_node)
+comp_np.set_shader(Shader.load_compute(Shader.SL_GLSL, "blob.comp"))
+comp_np.set_shader_input("ssbo", buffer)
+comp_np.set_shader_input("radius", radius)
+comp_np.set_shader_input("model_velocity", vel)
+
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
 geom     = Geom(vtx_data)
 blobPrim = GeomTrifans(Geom.UHStatic)
@@ -119,10 +128,8 @@ geom.doublesideInPlace()
 geom_node = GeomNode('blob-geom_node')
 geom_node.addGeom(geom)
 nodepath = base.render.attach_new_node(geom_node)
-nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
+nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="default_shader.vert", fragment="default_shader.frag"))
 nodepath.set_shader_input("ssbo", buffer)
-nodepath.set_shader_input("model_velocity", vel)
-nodepath.set_shader_input("radius", radius)
 nodepath.set_shader_input("col", col)
 
 base.taskMgr.add(update, "update", taskChain='default')
