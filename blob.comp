@@ -1,15 +1,6 @@
 #version 430
 
-uniform mat4 p3d_ModelViewProjectionMatrix;
-//uniform mat4 p3d_ViewProjectionMatrix;
-uniform mat4 p3d_ModelMatrix;
-//uniform float4x4 trans_world_to_blob;
 uniform float osg_DeltaFrameTime;
-
-// nb 'inout' is not in-standard, and it only passes the value to the frag shader
-/*inout vec4 p3d_Vertex;
-in vec4 p3d_Color;
-in vec2 basis;*/
 
 struct P3d_data {
     vec4 pos;                       // 4x 4B
@@ -17,9 +8,9 @@ struct P3d_data {
     vec4 colour;                    // 4x 4B
     vec2 basis;                     // 2x 4B
     vec2 vel;                       // 2x 4B
-};                                  //  = 16B
+};                                  //  = 16 * 4B = 64B
 
-// SSBO for vertex pulling
+// SSBO containing vertex data as above struct
 layout (std430, binding = 0) buffer ssbo { 
     P3d_data p3d_data[13];          //  = 48B x 13
     //Custom_data vtx_data[13];       //  = 16B x 13
@@ -27,12 +18,8 @@ layout (std430, binding = 0) buffer ssbo {
 
 const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
-//const float DIST_EDGEPOINTS = .51;        // hopefully should be compatible with the radius
 uniform float radius;
 uniform vec2 model_velocity;
-uniform vec4 col;
-
-out vec4 v_col;
 
 vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angularFreq) {
     // SHM angular frequency parameter must be positive!
@@ -112,8 +99,9 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 }
 
 void main() {
-    uint vtx = gl_VertexID;
-    v_col = p3d_data[vtx].colour * col;
+    // each blob gets a wg, each wg handles a blob's verts
+    uint vtx = gl_LocalInvocationID;
+
     vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
     if (vtx != 0) {                         // which experiences no harmonic motion
         // get the 2D vertex positions in world-space
@@ -148,6 +136,6 @@ void main() {
         //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     } 
     
-    // calculate gl_Position with the new position and remaining matrices
-    gl_Position = p3d_ModelViewProjectionMatrix * new_pos;
+    // write vertex pos with the new position and remaining matrices
+    p3d_Vertex[vtx] = new_pos;
 }
