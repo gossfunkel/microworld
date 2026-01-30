@@ -2,7 +2,7 @@
 
 uniform mat4 p3d_ModelViewProjectionMatrix;
 //uniform mat4 p3d_ViewProjectionMatrix;
-//uniform mat4 p3d_ModelMatrix;
+uniform mat4 p3d_ModelMatrix;
 //uniform float4x4 trans_world_to_blob;
 uniform float osg_DeltaFrameTime;
 
@@ -32,6 +32,7 @@ const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
 //const float DIST_EDGEPOINTS = .51;        // hopefully should be compatible with the radius
 uniform float radius;
+uniform vec2 model_velocity;
 uniform vec4 col;
 
 out vec4 v_col;
@@ -116,17 +117,20 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 void main() {
     uint vtx = gl_VertexID;
     v_col = p3d_data[vtx].colour * col;
-    vec4 new_pos;
-    if (vtx != 0) {
-        // get the 2D vertex position in world-space
-        //vec2 centrepoint = vec4(p3d_ModelMatrix * vec4(0.,0.,0.,1.)).xy;
+    vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
+    if (vtx != 0) {                         // which experiences no harmonic motion
+        // get the 2D vertex positions in world-space
+        //vec2 centrepoint = vec4(p3d_ModelMatrix * vec4(p3d_data[0].pos,0.,1.)).xy;
         //vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_data[vtx].pos).xy;
-        // get the 2D vertex position in model-space
-        vec2 vtx_mod = p3d_data[vtx].pos.xy;
 
-        // calculate equilibrium pos in model-space
-        //vec2 world_basis = vec4(p3d_ModelMatrix * vec4(vtx_data[vtx].basis,0.,1.)).xy;
-        //vec2 desire_vtx = centrepoint + world_basis * radius;
+        // get change in origin position 
+        //vec2 model_speed = vtx_data[0].vel;
+
+        // calculate current vertex position in model-space
+        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+
+        // calculate where potential minimum is for vertex based on relative displacement of centrepoint over dt
+        // desire position = relative-centrepoint-pos + basis-vector-to-centrepoint * radius
         vec2 desire_vtx = vtx_data[vtx].basis * radius;
 
         // calculate new position and vel in 2D model-space
@@ -137,15 +141,15 @@ void main() {
                       10.);
         new_pos = vec4(sho_out.xy, 0., 1.);
 
+        // calculate model translation in world-space
+        //vec2 model_pos = vec4(p3d_ModelMatrix * vec4(vtx_data[vtx].basis,0.,1.)).xy;
+        // transform to world-space
+        p3d_data[vtx].pos = new_pos;
+
         // write output to buffers (FIXME relativity??)
         vtx_data[vtx].vel = sho_out.zw;
         //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
-        p3d_data[vtx].pos = new_pos;
-    } else {
-        // centrepoint experiences no physics
-        new_pos = vec4(vtx_data[0].basis,0.,1.);
-        //p3d_data[vtx].pos = vec4(vtx_data[0].basis,0.,1.);
-    }
+    } 
     
     // calculate gl_Position with the new position and remaining matrices
     gl_Position = p3d_ModelViewProjectionMatrix * new_pos;

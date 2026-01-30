@@ -49,18 +49,15 @@ class BallType(Enum):
 
 CONFIG: str = """
 gl-version 4 3
-gl-debug 1
+gl-debug true
+gl-debug-buffers true
+premunge-data false
 win-size 1200 800
-show-frame-rate-meter 1
+show-frame-rate-meter true
 hardware-animated-vertices true
 framebuffer-srgb true
-//framebuffer-float true
-//color-bits 128
 basic-shaders-only false
 //gl-interleaved-arrays true
-//framebuffer-multisample true
-//multisamples 2
-//threading-model Cull/Draw
 """
 loadPrcFileData("", CONFIG)
 
@@ -127,38 +124,25 @@ class Blob:
         self.col: tuple     = col
         self.radius: float  = 2.
         self.verts: int     = 12        # number of OUTER vertices (blob requires centre)
+        self.velocity       = Vec2(0.,0.)
         self.colliding      = False
 
         # load the default blob from file
         self.nodepath = loader.loadModel("blob_default.bam")
         self.nodepath.set_color(col)
 
+        print("Loading VBO data...")
+
         # modify geom vertex data from file
         vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
-
-        # modify basis vecs by radius
-        # basis = BASIS_VECS * radius
-        # basis_view = memoryview(vtx_data.modify_array(3)).cast('B')
-        # basis_vals = bytearray()
-        # for i in range(13):
-        #     basis_vals.extend(struct.pack('2f', basis[i*2], basis[i*2 + 1]))
-        # basis_view[:] = basis_vals
+        print(f"VBO data from file: {vtx_data}")
 
         # make an SSBO from the model data for vertex pulling
-        byte_data = bytearray()
         p3d_array = vtx_data.get_array_handle(0).get_data()
-        # stride_0 = 48
         custom_array = vtx_data.get_array_handle(1).get_data()
-        byte_data.extend(p3d_array)
-        byte_data.extend(custom_array)
-        # stride_1 = 16
-        # for i in range(self.verts+1):
-        #     byte_data.extend(p3d_array[i*stride_0      :i*stride_0+32])    # pos
-        #     byte_data.extend(p3d_array[i*stride_0+32   :i*stride_0+56])    # norm
-        #     byte_data.extend(custom_array[i*stride_1   :i*stride_1+8])     # size (pad)
-        #     byte_data.extend(p3d_array[i*stride_0+56   :i*stride_0+88])    # col
-        #     byte_data.extend(custom_array[i*stride_1+8 :i*stride_1+24])    # basis
-        #     byte_data.extend(custom_array[i*stride_1+24:i*stride_1+40])    # vel
+        byte_data = bytearray(p3d_array)
+        print(f"byte data for SSBO: {byte_data}")
+        #byte_data.extend(custom_array)
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
         # node = GeomNode(f"{self.name}_geom")
@@ -172,9 +156,9 @@ class Blob:
         # activate the jiggle shader on the blob
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
         self.nodepath.set_shader_input("ssbo", self.buffer)
+        self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
-        #self.nodepath.setShaderAuto()
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq)  # generate sound effect at given freq
@@ -239,21 +223,30 @@ class Blob:
                 self.add_ball(item)
                 base.floating_items.remove(item)
 
+        self.nodepath.set_pos(pos + self.velocity)
+        self.nodepath.set_shader_input("model_velocity", self.velocity)
+        self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) # friction slows us
+
         self.spinner += (globalClock.getDt())%360
         return task.cont
 
     # move the blob by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
+        gsg = base.win.get_gsg()
         match direction:
-            case "left":                        # go left
-                self.nodepath.set_pos(pos - Vec3(.05,0.,0.))
+            case "left":             # go left              SSBO         GSG  NEW_VEL     OFFSET (array 1 row 0 col 1: 48+8= 56B)
+                self.velocity -=  Vec3(.05,0.,0.)
+                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 56)
             case "right":                       # go right
-                self.nodepath.set_pos(pos + Vec3(.05,0.,0.))
-            case "fwd":                         # go forwards
-                self.nodepath.set_pos(pos + Vec3(0.,.05,0.))
+                self.velocity +=  Vec3(.05,0.,0.)
+                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05),  56)
+            case "fwd":                         # go forwards                             (array 1 row 0 col 1 comp 1: 48+8+4= 60B)
+                self.velocity +=  Vec3(0.,.05,0.)
+                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05), 60)
             case "back":                        # ...you guessed it
-                self.nodepath.set_pos(pos - Vec3(0.,.05,0.))
+                self.velocity -=  Vec3(0.,.05,0.)
+                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 60)
             case _: 
                 print("Move direction not recognised!")
 
@@ -263,8 +256,8 @@ class Ball:
                  blob: Blob | None = None, index: int | None = 0, sfx = None):
         self.type  = type
         self.name  = name
-        self.blob  = blob            # blob that ball is attached to, if any
-        self.index = index          #s helps balls rotate on the blobs neatly
+        self.blob  = blob           # blob that ball is attached to, if any
+        self.index = index          # helps balls rotate on the blobs neatly
         self.sfx   = sfx            # associated noise
         self.radius: float = .15    # personal space
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
