@@ -45,7 +45,7 @@ def update(task):
     #vtx_view = memoryview(nodepath.node().get_vertex_data().modify_array(0)).cast('f')
     #print(f"some verts: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
-    nodepath.set_pos(pos + Vec3(vel, 0.))
+    nodepath.set_pos(nodepath.get_pos() + Vec3(vel, 0.))
     nodepath.set_shader_input("model_velocity", vel)
     vel = vel/10. if vel > EPSILON else Vec2(0.,0.) # friction slows us
 
