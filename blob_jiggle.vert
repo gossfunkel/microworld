@@ -132,7 +132,7 @@ void main() {
         // calculate where potential minimum is for vertex based on relative displacement of centrepoint over dt
         // desire position = relative-centrepoint-pos + basis-vector-to-centrepoint * radius
         vec2 desire_vtx = vtx_data[vtx].basis * radius;
-
+        /*
         // calculate new position and vel in 2D model-space
         vec4 sho_out = SHO(vtx_mod, 
                       vtx_data[vtx].vel, 
@@ -140,7 +140,6 @@ void main() {
                       osg_DeltaFrameTime,
                       10.);
         new_pos = vec4(sho_out.xy, 0., 1.);
-
         // calculate model translation in world-space
         //vec2 model_pos = vec4(p3d_ModelMatrix * vec4(vtx_data[vtx].basis,0.,1.)).xy;
         // transform to world-space
@@ -148,6 +147,7 @@ void main() {
 
         // write output to buffers (FIXME relativity??)
         vtx_data[vtx].vel = sho_out.zw;
+        */ new_pos = vec4(desire_vtx,0.,1.);
         //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     } 
     

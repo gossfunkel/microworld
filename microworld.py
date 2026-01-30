@@ -134,12 +134,13 @@ class Blob:
         print("Loading VBO data...")
 
         # modify geom vertex data from file
+        print(self.nodepath.node().get_geom(0))
         vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
         print(f"VBO data from file: {vtx_data}")
 
         # make an SSBO from the model data for vertex pulling
         p3d_array = vtx_data.get_array_handle(0).get_data()
-        custom_array = vtx_data.get_array_handle(1).get_data()
+        #custom_array = vtx_data.get_array_handle(1).get_data()
         byte_data = bytearray(p3d_array)
         print(f"byte data for SSBO: {byte_data}")
         #byte_data.extend(custom_array)
@@ -223,7 +224,7 @@ class Blob:
                 self.add_ball(item)
                 base.floating_items.remove(item)
 
-        self.nodepath.set_pos(pos + self.velocity)
+        self.nodepath.set_pos(self.pos() + Vec3(self.velocity, 0.))
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) # friction slows us
 
@@ -236,16 +237,16 @@ class Blob:
         gsg = base.win.get_gsg()
         match direction:
             case "left":             # go left              SSBO         GSG  NEW_VEL     OFFSET (array 1 row 0 col 1: 48+8= 56B)
-                self.velocity -=  Vec3(.05,0.,0.)
+                self.velocity -=  Vec2(.05,0.)
                 #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 56)
             case "right":                       # go right
-                self.velocity +=  Vec3(.05,0.,0.)
+                self.velocity +=  Vec2(.05,0.)
                 #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05),  56)
             case "fwd":                         # go forwards                             (array 1 row 0 col 1 comp 1: 48+8+4= 60B)
-                self.velocity +=  Vec3(0.,.05,0.)
+                self.velocity +=  Vec2(0.,.05)
                 #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05), 60)
             case "back":                        # ...you guessed it
-                self.velocity -=  Vec3(0.,.05,0.)
+                self.velocity -=  Vec2(0.,.05)
                 #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 60)
             case _: 
                 print("Move direction not recognised!")
