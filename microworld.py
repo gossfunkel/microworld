@@ -134,20 +134,17 @@ class Blob:
         print("Loading VBO data...")
 
         # modify geom vertex data from file
-        print(self.nodepath.node().get_geom(0))
-        vtx_data = self.nodepath.node().get_geom(0).get_vertex_data()
+        #print(self.nodepath.node().get_child(0).get_geom(0))
+        vtx_data = self.nodepath.node().get_child(0).get_geom(0).get_vertex_data()
         print(f"VBO data from file: {vtx_data}")
 
         # make an SSBO from the model data for vertex pulling
         p3d_array = vtx_data.get_array_handle(0).get_data()
         #custom_array = vtx_data.get_array_handle(1).get_data()
         byte_data = bytearray(p3d_array)
-        print(f"byte data for SSBO: {byte_data}")
         #byte_data.extend(custom_array)
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
-        # node = GeomNode(f"{self.name}_geom")
-        # node.add_geom(geom)
         self.nodepath.reparent_to(base.render)
         # store position in the node 
         self.nodepath.set_pos(pos.x, pos.y, 0)
@@ -266,7 +263,7 @@ class Ball:
         self.orbiting = True if blob is not None else False
 
         model = base.loader.load_model("sphere.egg")
-        model.setTransparency(1)
+        #model.setTransparency(1)
         ts_col = TextureStage('ts_col')
         model.setTexture(ts_col, loader.loadTexture(self.type.value))
         # ts_glow = TextureStage('ts_glow')
@@ -278,17 +275,19 @@ class Ball:
         model.reparent_to(self.nodepath)
         if self.blob is None:
             assert pos is not None, f"A free ball must have a position!"
-            self.nodepath.set_pos(pos)                            # use given position
+            self.nodepath.set_pos(pos)                              # use given position
         else:
             self.nodepath.set_pos(self.blob.pos() + Vec3(.5,0,.22)) # adjustments for oscillations
         
-            base.sfx.bongs[self.blob.bong].play()
+            base.sfx.bongs[self.blob.bong].play()                   # play bong
         self.task_name = f"update_ball-{self.name}"
-        base.taskMgr.add(self.update, self.task_name)
+        base.taskMgr.add(self.update, self.task_name)               # add update to taskMgr
 
+    # Function to enable orbiting with Sequences
     def set_orbiting_true(self):
         self.orbiting = True
 
+    # Lerp the ball to a blob
     def fly_to_target(self, target: Blob):
         self.orbiting = False
         # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)

@@ -1,7 +1,8 @@
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     loadPrcFileData, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
-    GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName
+    GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName,
+    ModelRoot, Thread
 )
 import struct
 
@@ -80,10 +81,11 @@ geom_node.addGeom(geom)
 
 print("-- Mesh made. Creating NodePath...")
 
-# create a new node and attach to base.render
-nodepath = base.render.attach_new_node(geom_node)
-# store position in the node FIXME currently nodepath pos must stay at origin for the world matrix
-#nodepath.set_pos(pos.x, pos.y, 0)
+# Ensure mesh has a root
+root = ModelRoot("Blob_model_root")
+root.addChild(geom_node)
+# create a new nodepath for the model
+nodepath = NodePath(root)
 # give the blob a depth offset to prevent self-shadowing etc
 nodepath.setDepthOffset(1)
 
