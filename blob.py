@@ -9,9 +9,9 @@ from enum import Enum
 from scipy.signal import chirp
 import numpy as np
 
+# constants 
 EPSILON    = 0.0001
 TAU        = np.pi * 2.
-radius     = 1.
 BASIS_VECS = [0.,     0.,
               -.866, -.5,
               -.5,   -.866,
@@ -26,6 +26,7 @@ BASIS_VECS = [0.,     0.,
               -.866,  .5,
               -1.,    0.]
 
+# Panda3d configuration file
 config_vars: str = """
 win-size 1200 800
 //show-frame-rate-meter 1
@@ -39,6 +40,7 @@ basic-shaders-only false
 """
 loadPrcFileData("", config_vars)
 
+# initialise a new GeomVertexData and associated formats
 def GENERATE_VTX_DATA(num_rows: int):
     print("-> Creating GeomVertexData and associated formats...")
     vtx_format  = GeomVertexFormat()
@@ -57,7 +59,8 @@ def GENERATE_VTX_DATA(num_rows: int):
     vtx_data.unclean_set_num_rows(num_rows)                           # 1 row per vertex (12 rim, 1 centre)
     return vtx_data
 
-def POPULATE_VTX_DATA(vtx_data, col: Vec4, vel: Vec2):
+# fill a GeomVertexData with basis vectors, colour, and velocity information
+def POPULATE_VTX_DATA(vtx_data: GeomVertexData, col: Vec4, vel: Vec2):
     # open memoryviews to write position, normal, colour, basis, and velocity data to VBO
     print("-> Populating vertex data...")
     view   = memoryview(vtx_data.modify_array(0)).cast('B')
@@ -85,6 +88,7 @@ def GENERATE_PRIM(num_verts: int):
     blobPrim.closePrimitive()                               # close the primitive
     return blobPrim
 
+# make a compute shader to procedurally animate vertices
 def CREATE_COMP():
     # set up the compute node to calculate the vertex positions
     print("-> Setting up a compute shader for a blob...")
@@ -114,6 +118,7 @@ def BIND_BLOB(bound_blob):
     base.accept("s", bound_blob.move, ["back"])
     base.accept("s-repeat", bound_blob.move, ["back"])
 
+# calculate the absolute distance between two 3D points
 def ABS_DIST(a: Vec3, b: Vec3) -> float:
     return np.sqrt((a.x-b.x)*(a.x-b.x) + 
                    (a.y-b.y)*(a.y-b.y) +
@@ -178,21 +183,24 @@ class SoundFX:
         self.bongs.append(self._gen_bong(freq))                                 # load buffer to bongs list
         return len(self.bongs)-1                                                # return index of bong
 
+# mesh, data, and behaviour for a cell ('blob')
 class CellBlob:
     # initialise a circle with 1 inner and 12 outer vertices, with compute-managed animation
     def __init__(self, pos=Vec3(0.,0.,0.),vel=Vec2(0.,0.),col=Vec4(1.,1.,1.,1.),rad=1.):
         print("-> Initialising blob...")
-        self.vel = vel
-        self.col = col
-        self.radius = rad
+        self.vel: Vec2 = vel
+        self.col: Vec4 = col
+        self.radius: float = rad
+        self.balls: list[Ball] = []
+        self.spinner: float = 0                                             # this tells balls on this blob how to rotate neatly
+        self.num_balls: int = len(self.balls)                               # to help with angle calculations
 
         # get a new VBO and SSBO with a blob model
         vtx_data = GENERATE_VTX_DATA(13)
         vtx_data, self.buffer = POPULATE_VTX_DATA(vtx_data, col, vel)
 
-        # create a compute shader and send it blob information
-        self.comp_np = CREATE_COMP()
-        self.comp_np.set_shader_input("ssbo", self.buffer)
+        self.comp_np = CREATE_COMP()                                        # create a compute shader
+        self.comp_np.set_shader_input("ssbo", self.buffer)                  # send it blob information
         self.comp_np.set_shader_input("radius", self.radius)
         self.comp_np.set_shader_input("model_velocity", self.vel)
 
@@ -206,47 +214,57 @@ class CellBlob:
         geom_node = GeomNode('blob-geom_node')
         geom_node.addGeom(geom)
 
-        # make nodepath and activate custom shaders, send SSBO and colour
         print("-> Composing blob NodePath...")
-        self.nodepath = base.render.attach_new_node(geom_node)
-        self.nodepath.set_shader(Shader.load(
+        self.nodepath = base.render.attach_new_node(geom_node)              # make nodepath
+        self.nodepath.set_shader(Shader.load(                               # activate custom shaders
             Shader.SL_GLSL, 
             vertex="default_shader.vert", 
             fragment="default_shader.frag"
         ))
-        self.nodepath.set_shader_input("ssbo", self.buffer)
+        self.nodepath.set_shader_input("ssbo", self.buffer)                 # send shader SSBO and colour
         self.nodepath.set_shader_input("col", self.col)
 
-        # store position in the nodepath
-        self.nodepath.set_pos(pos)
+        self.nodepath.set_pos(pos)                                          # store position in the nodepath
 
         base.taskMgr.add(self.update, "update", taskChain='default')
 
     def update(self, task):
-        # processor-killing debug
-        #print(f"nodepath position: {pos}")
-        #vtx_view = memoryview(nodepath.node().get_vertex_data().modify_array(0)).cast('f')
-        #print(f"some verts: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
+        pos = self.nodepath.get_pos()                                       # get own position
 
-        pos = self.nodepath.get_pos()
-
-        # naive collision check with items - TODO spacial hashing
-        for item in base.floating_balls:
+        for item in base.floating_balls:                                    # naive collision check with balls
+                                                                            # TODO spacial hashing
             if ABS_DIST(pos, Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
-                #self.add_ball(item)
-                self.radius *= 1.1
-                self.comp_np.set_shader_input("radius", self.radius)
-                base.floating_balls.remove(item)
-                item.nodepath.remove_node(Thread.current_thread)
-                taskMgr.remove(item.task_name)
-                base.sound_fx.brrp_consume.play()
+                base.floating_balls.remove(item)                            # remove reference in base
+                self.add_ball(item)                                         # collect if collides
 
-        # update nodepath position by velocity
-        self.nodepath.set_pos(pos + Vec3(self.vel, 0.))
-        self.nodepath.set_shader_input("model_velocity", self.vel)
-        self.vel = self.vel/2. if self.vel > EPSILON else Vec2(0.,0.)     # friction slows us
+        self.nodepath.set_pos(pos + Vec3(self.vel, 0.))                     # update nodepath position by velocity
+        self.comp_np.set_shader_input("model_velocity", self.vel)           # update shader
+        self.vel = self.vel/2. if self.vel > EPSILON else Vec2(0.,0.)       # friction slows us
+
+        self.spinner += (globalClock.getDt())%360                           # increment spinner for balls
 
         return task.cont
+
+    def grow(self):
+        self.radius *= 1.1                                                  # make the blob bigger
+        self.comp_np.set_shader_input("radius", self.radius)                # update the shader
+
+    def add_ball(self, ball=None, balls: int = 1):
+        if isinstance(ball,type(None)): # make a new mana ball
+            # FIXME this will break when a ball is generated after giving one away due to names
+            self.balls.append(Ball(BallType.MANA, self.name+"-ball-"+str(self.num_balls), blob=self, index=self.num_balls))
+            self.num_balls += 1
+        else:
+            if ball.type is BallType.FOOD:
+                ball.consume()                                              # consume food to grow!
+                self.grow()                                                 # TODO add vertices at size thresholds
+            else:
+                self.balls.append(ball)                                     # add ball to balls
+                ball.blob = self                                            # change ball references to self
+                ball.index = self.num_balls                                 # n.b. this is only incremented after this, so the index is correct
+                ball.set_orbiting_true()
+                base.sfx.bong_300.play()
+                self.num_balls += 1
 
     def move(self, direction):
         match direction:
@@ -274,6 +292,7 @@ class Ball:
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
         self.angle = 0
         self.orbiting = True if blob is not None else False
+        self.removing = False       # flag for removing ball
 
         model = base.loader.load_model("sphere.egg")
         #model.setTransparency(1)
@@ -285,25 +304,24 @@ class Ball:
         # model.setTexture(ts_glow, black_tex)
         model.set_scale(.06)
         self.nodepath = base.render.attach_new_node(f"ball-{self.name}")
-        model.reparent_to(self.nodepath)
+        model.reparent_to(self.nodepath)                                    # attach node to render
         if self.blob is None:
             assert pos is not None, f"A free ball must have a position!"
-            self.nodepath.set_pos(pos)                            # use given position
+            self.nodepath.set_pos(pos)                                      # use given position
         else:
             self.nodepath.set_pos(self.blob.nodepath.get_pos() + Vec3(.5,0,.22)) # adjustments for oscillations
         
-            base.sfx.bongs[self.blob.bong].play()
-        self.task_name = f"update_ball-{self.name}"
-        base.taskMgr.add(self.update, self.task_name)
+            base.sfx.bong_300.play()                                        # make a lil bong noise
+        self.task_name = f"update_ball-{self.name}"                         # save task name so it can be removed later
+        base.taskMgr.add(self.update, self.task_name)                       # add update to taskMgr
 
     def set_orbiting_true(self):
         self.orbiting = True
 
     def fly_to_target(self, target: CellBlob):
         self.orbiting = False
-        # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)
         ratio = (self.index+1) / self.blob.num_balls
-        elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio)   # this works if dt is in seconds (doubt, hahaha)
+        elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio) 
         move_int = self.nodepath.posInterval(1., target.pos() + Vec3(0,0,elevation), fluid=1)
         Sequence(
             move_int,
@@ -312,52 +330,57 @@ class Ball:
         ).start()
 
     def update(self, task):
-        pos = self.nodepath.get_pos()                               # current ball position
+        if self.removing: return task.done
+        pos = self.nodepath.get_pos()                                       # current ball position
         if (self.orbiting):
-            # each ball gets a root of unity of num_balls (arrange them in an even circle)
+            # each ball gets a root of unity of num_balls (i.e. arrange them in an even circle)
             ratio = (self.index + 1)/ self.blob.num_balls
             self.angle = TAU * ratio + self.blob.spinner
 
-            elevation = self.radius*1.2 + .04 * np.sin(self.angle)  # bob up and down rhythmically
-
-            # go round in a little circle over the blob
+            elevation = self.radius*1.2 + .04 * np.sin(self.angle)          # bob up and down rhythmically
+                                                                            # go round in a little circle over the blob
             aimpos = self.blob.nodepath.get_pos() + Vec3(np.cos(self.angle)/2.,
                                             np.sin(self.angle)/2.,
                                             elevation)
-            abs_dist: float = ABS_DIST(pos, aimpos)                 # absolute distance of that lad
-            damper = min(1, max(0, abs_dist/2))                     # 1 if far, 0 if close
+            abs_dist: float = ABS_DIST(pos, aimpos)                         # absolute distance of that lad
+            damper = min(1, max(0, abs_dist/2))                             # 1 if far, 0 if close
 
-            self.nodepath.set_pos(pos + (aimpos-pos)*damper)        # load pos into the nodepath
+            self.nodepath.set_pos(pos + (aimpos-pos)*damper)                # load pos into the nodepath
         else:
             self.nodepath.set_pos(pos.x,pos.y,0+np.sin(globalClock.getDt())*.1)
         return task.cont
 
     def consume(self):
-        self.nodepath.remove_node(Thread.current_thread)
-        # play a little consume brrrrp
-        base.sfx.brrps[self.sfx].play()
-        taskMgr.remove(self.task_name)
+        self.removing = True
+        self.nodepath.remove_node(Thread.current_thread)                    # remove nodepath from graph
+        base.sound_fx.brrp_consume.play()                                   # play a little consume brrrrp
+        taskMgr.remove(self.task_name)                                      # remove update method from taskMgr
+
+#    def __del__(self):
 
 
+# default entry point: launch game
 if __name__ == "__main__":
     print("="*30 + "\n... Loading Blob ...")        # application entry point ---------------------
 
     print("-> Initialising ShowBase...")
     ShowBase()                                      # Showbase initialised
 
-    base.set_background_color(.2,.2,.2,.1)
+    base.set_background_color(.2,.1,.2,1.)
 
     base.sound_fx = SoundFX()                       # initialise sound library and put in base
     base.floating_balls = []                        # construct a list to store balls in 
 
-    # construct CellBlob for player 1
+                                                    # construct CellBlob for player 1
     player_1 = CellBlob(pos=Vec3(0.,-5.,0.),col=Vec4(0.,0.,1.,1.))
 
     BIND_BLOB(player_1)                             # Player 1 bound to user input
     base.accept("escape", base.userExit)            # hit `Esc` to quickly quit the game
 
-    # make a test ball to collect
-    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,-2.,0.))
+                                                    # make some test balls to collect
+    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(-1.,-2.,0.))
+    base.floating_balls.append(test_ball_1)
+    test_ball_2 = Ball(BallType.HEAL, f"ball-{len(base.floating_balls)}", pos=Vec3(1.,-2.,0.))
     base.floating_balls.append(test_ball_1)
 
     base.cam.setPos(0,-18,5)                        # Adjust camera position and angle
