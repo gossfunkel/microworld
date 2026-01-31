@@ -1,11 +1,11 @@
 from direct.showbase.ShowBase import ShowBase
-from direct.filter.CommonFilters import CommonFilters
+#from direct.filter.CommonFilters import CommonFilters
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
     GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture, TextNode, Thread, Shader, ShaderBuffer
+    TextureStage, Texture, TextNode, Thread, Shader, ShaderBuffer, BamFile
 )
 import numpy as np
 from enum import Enum
@@ -51,12 +51,12 @@ CONFIG: str = """
 gl-version 4 3
 gl-debug true
 gl-debug-buffers true
-premunge-data false
+//premunge-data false
 win-size 1200 800
 //show-frame-rate-meter true
 hardware-animated-vertices true
 framebuffer-srgb true
-basic-shaders-only false
+//basic-shaders-only false
 //gl-interleaved-arrays true
 """
 loadPrcFileData("", CONFIG)
@@ -128,15 +128,20 @@ class Blob:
         self.colliding      = False
 
         # load the default blob from file
-        self.nodepath = loader.loadModel("blob_default.bam")
-        self.nodepath.set_color(col)
+        # self.nodepath = loader.loadModel("blob_default.bam")
+        # self.nodepath.set_color(col)
+        #with loaded_file as BamFile():
+        loaded_file = BamFile()
+        loaded_file.open_read("blob_default.bam")
+        node = loaded_file.read_node()
+        loaded_file.close()
 
         print("Loading VBO data...")
 
         # modify geom vertex data from file
-        #print(self.nodepath.node().get_child(0).get_geom(0))
-        vtx_data = self.nodepath.node().get_child(0).get_geom(0).get_vertex_data()
-        print(f"VBO data from file: {vtx_data}")
+        #print(node.get_child(0).get_geom(0))
+        vtx_data = node.get_child(0).get_geom(0).get_vertex_data()
+        #print(f"VBO data from file: {vtx_data}")
 
         # make an SSBO from the model data for vertex pulling
         p3d_array = vtx_data.get_array_handle(0).get_data()
@@ -145,7 +150,7 @@ class Blob:
         #byte_data.extend(custom_array)
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
-        self.nodepath.reparent_to(base.render)
+        self.nodepath = base.render.attach_new_node(node)
         # store position in the node 
         self.nodepath.set_pos(pos.x, pos.y, 0)
         # give the blob a depth offset to prevent self-shadowing etc
@@ -264,8 +269,8 @@ class Ball:
 
         model = base.loader.load_model("sphere.egg")
         #model.setTransparency(1)
-        ts_col = TextureStage('ts_col')
-        model.setTexture(ts_col, loader.loadTexture(self.type.value))
+        #ts_col = TextureStage('ts_col')
+        model.setTexture(loader.loadTexture(self.type.value))
         # ts_glow = TextureStage('ts_glow')
         # ts_glow.setMode(TextureStage.MGlow)
         # black_tex = loader.loadTexture("black.png")
@@ -330,18 +335,18 @@ class Ball:
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
-        self.set_background_color(0.12,0.05,0.22,1.)                # dark background
+        self.set_background_color(0.12,0.05,0.22,1.)              # dark background
 
-        render.setAntialias(AntialiasAttrib.MAuto)        # set global antialiasing
+        render.setAntialias(AntialiasAttrib.MAuto)                # set global antialiasing
         #render.setShaderAuto()
 
-        self.sfx = SoundFX()                              # initialise sound effect library
+        self.sfx = SoundFX()                                      # initialise sound effect library
 
-        big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
-        big_light_np.node().setShadowCaster(True, 512, 512)
-        big_light_np.set_color(.5,.45,.49)
-        big_light_np.setHpr(20, -80, 0)
-        render.setLight(big_light_np)                     # set a warm directional light on the whole scene
+        # big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
+        # big_light_np.node().setShadowCaster(True, 512, 512)
+        # big_light_np.set_color(.5,.45,.49)
+        # big_light_np.setHpr(20, -80, 0)
+        # render.setLight(big_light_np)                             # set a warm directional light on the whole scene
 
         self.p1 = Blob("p1",Vec2(0.,-5.),Vec4(0.,0.,1.,1.), 200)  # create a test blob
         self.p2 = Blob("p2",Vec2(0., 5.),Vec4(0.,1.,0.,1.), 300)  # create a second test blob
