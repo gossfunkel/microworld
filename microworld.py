@@ -53,7 +53,7 @@ gl-debug true
 gl-debug-buffers true
 premunge-data false
 win-size 1200 800
-show-frame-rate-meter true
+//show-frame-rate-meter true
 hardware-animated-vertices true
 framebuffer-srgb true
 basic-shaders-only false
