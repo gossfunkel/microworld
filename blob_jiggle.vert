@@ -2,7 +2,7 @@
 
 uniform mat4 p3d_ModelViewProjectionMatrix;
 //uniform mat4 p3d_ViewProjectionMatrix;
-uniform mat4 p3d_ModelMatrix;
+//uniform mat4 p3d_ModelMatrix;
 //uniform float4x4 trans_world_to_blob;
 uniform float osg_DeltaFrameTime;
 
@@ -21,13 +21,11 @@ struct P3d_data {
 
 // SSBO for vertex pulling
 layout (std430, binding = 0) buffer ssbo { 
-    P3d_data p3d_data[13];          //  = 48B x 13
-    //Custom_data vtx_data[13];       //  = 16B x 13
-};                                  // == 64B x 13 = 832B buffer
+    P3d_data p3d_data[13];          //  = 64B x 13 
+};                                  // = 832B buffer
 
 const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
-//const float DIST_EDGEPOINTS = .51;        // hopefully should be compatible with the radius
 uniform float radius;
 uniform vec2 model_velocity;
 uniform vec4 col;

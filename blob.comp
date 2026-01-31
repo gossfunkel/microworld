@@ -107,15 +107,12 @@ void main() {
 
     vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
     if (vtx != 0) {                         // which experiences no harmonic motion
-        // get the 2D vertex position in world-space
-        //vec2 vtx_world = vec4(p3d_ModelMatrix * p3d_data[vtx].pos).xy;
-        // calculate vertex position relative to centrepoint after movement
-        //vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+        // calculate vertex position relative to centrepoint after movement (model-space)
+        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
 
         // calculate where potential minimum is for vertex based on relative displacement of centrepoint over dt
         // desire position = relative-centrepoint-pos + basis-vector-to-centrepoint * radius
         vec2 desire_vtx = p3d_data[vtx].basis * radius;
-/*
         
         // calculate new position and vel in 2D model-space
         vec4 sho_out = SHO(vtx_mod, 
@@ -125,9 +122,8 @@ void main() {
                       10.);
         new_pos = vec4(sho_out.xy, 0., 1.);
 
-        // write output to buffers (FIXME relativity??)
+        // write output to buffer (FIXME relativity??)
         p3d_data[vtx].vel = sho_out.zw;
-*/
         
         // for testing- just keep it circular
         new_pos = vec4(desire_vtx,0.,1.);
