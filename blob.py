@@ -2,9 +2,11 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName,
-    Shader, ShaderBuffer, ComputeNode
+    Shader, ShaderBuffer, ComputeNode, TextureStage
 )
 import struct
+from enum import Enum
+from scipy.signal import chirp
 import numpy as np
 
 EPSILON = 0.0001
@@ -91,6 +93,82 @@ def CREATE_COMP():
     comp_np.set_shader(Shader.load_compute(Shader.SL_GLSL, "blob.comp"))
     return comp_np
 
+# couple a blob to the user input
+def BIND_BLOB(bound_blob):
+    print(f"-> Binding {bound_blob} to user input...")
+    base.accept("arrow_left", bound_blob.move, ["left"])
+    base.accept("arrow_left-repeat", bound_blob.move, ["left"])
+    base.accept("a", bound_blob.move, ["left"])
+    base.accept("a-repeat", bound_blob.move, ["left"])
+    base.accept("arrow_right", bound_blob.move, ["right"])
+    base.accept("arrow_right-repeat", bound_blob.move, ["right"])
+    base.accept("d", bound_blob.move, ["right"])
+    base.accept("d-repeat", bound_blob.move, ["right"])
+    base.accept("arrow_up", bound_blob.move, ["fwd"])
+    base.accept("arrow_up-repeat", bound_blob.move, ["fwd"])
+    base.accept("w", bound_blob.move, ["fwd"])
+    base.accept("w-repeat", bound_blob.move, ["fwd"])
+    base.accept("arrow_down", bound_blob.move, ["back"])
+    base.accept("arrow_down-repeat", bound_blob.move, ["back"])
+    base.accept("s", bound_blob.move, ["back"])
+    base.accept("s-repeat", bound_blob.move, ["back"])
+
+# Enum relating Ball types to image files
+class BallType(Enum):
+    MANA = "teal.png"       # energy sources - electron transfer agents
+    FOOD = "gold.png"       # energy sources - catabolic substrate
+    HEAL = "green.png"      # nutrition - phospholipids
+    FRNA = "purple.png"     # nutrition - nucleotides
+    SALT = "white65.png"    # salts
+
+# container for sound effects
+class SoundFX:
+    def __init__(self):
+        self.bongs = []
+        self.brrps = []
+
+    def add_bong(self, freq: int, length: int = 6000, atk: int = 400) -> int:
+        freq_scale = length / 48000                                             # translate length into seconds
+        atk: np.array = np.linspace(0,1,atk, dtype=np.float32)                  # ascending attack
+        dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
+        env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
+        # freq is 400hz because sample length is 1/80s
+        BONG_SAMPLE   = np.array(np.sin(TAU * freq_scale * freq * np.linspace(0,1,length,endpoint=False)) * env * 32767, dtype=np.int16)
+        bong_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
+        bong_audio_buff.append(BONG_SAMPLE.tobytes())                           # add sample
+        bong_audio_buff.done()
+        self.bongs.append(base.loader.loadSfx(bong_audio_buff))                 # load buffer to bongs list
+        return len(self.bongs)-1                                                # return index of bong
+
+    def add_brrp(self, length=3200) -> int:
+        freq_scale: float = length / 48000                                      # translate length into seconds
+        atk: np.array = np.linspace(0,1,2500, dtype=np.float32)                 # ascending attack
+        dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
+        env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
+        amp: float    = .2
+        BRRP_SAMPLE = np.array(chirp(np.linspace(0,1,length,endpoint=False),    # return value from scipy.signal.chirp with our parameters
+                                     f0=450,
+                                     f1=1000, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * amp, dtype=np.int16)
+        BRRP_SAMPLE_2 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+                                     f0=300,
+                                     f1=700, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * (amp*.5), dtype=np.int16)
+        BRRP_SAMPLE_3 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+                                     f0=150,
+                                     f1=400, 
+                                     t1=freq_scale, 
+                                     method='hyperbolic') * env  * 32767 * (amp*.25), dtype=np.int16)
+        BRRP_SAMPLE = np.append(BRRP_SAMPLE, BRRP_SAMPLE_2)
+        BRRP_SAMPLE = np.append(BRRP_SAMPLE, BRRP_SAMPLE_3)
+        brrp_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
+        brrp_audio_buff.append(BRRP_SAMPLE.tobytes())                           # add sample
+        brrp_audio_buff.done()
+        self.brrps.append(base.loader.loadSfx(brrp_audio_buff))                 # load buffer to brrps list
+        return len(self.brrps)-1                                                # return index of brrp
+
 class CellBlob:
     # initialise a circle with 1 inner and 12 outer vertices, with compute-managed animation
     def __init__(self, pos=Vec3(0.,0.,0.),vel=Vec2(0.,0.),col=Vec4(1.,1.,1.,1.),rad=1.):
@@ -104,10 +182,10 @@ class CellBlob:
         vtx_data, self.buffer = POPULATE_VTX_DATA(vtx_data, col, vel)
 
         # create a compute shader and send it blob information
-        comp_np = CREATE_COMP()
-        comp_np.set_shader_input("ssbo", self.buffer)
-        comp_np.set_shader_input("radius", self.radius)
-        comp_np.set_shader_input("model_velocity", self.vel)
+        self.comp_np = CREATE_COMP()
+        self.comp_np.set_shader_input("ssbo", self.buffer)
+        self.comp_np.set_shader_input("radius", self.radius)
+        self.comp_np.set_shader_input("model_velocity", self.vel)
 
         # create a mesh from the vertices 
         print("-> Creating geometry...")
@@ -141,6 +219,14 @@ class CellBlob:
         #vtx_view = memoryview(nodepath.node().get_vertex_data().modify_array(0)).cast('f')
         #print(f"some verts: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
+        # naive collision check with items - TODO spacial hashing
+        for item in base.floating_balls:
+            if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
+                #self.add_ball(item)
+                self.radius *= 1.1
+                self.comp_np.set_shader_input("radius", self.radius)
+                base.floating_items.remove(item)
+
         # update nodepath position by velocity
         self.nodepath.set_pos(self.nodepath.get_pos() + Vec3(self.vel, 0.))
         self.nodepath.set_shader_input("model_velocity", self.vel)
@@ -161,34 +247,102 @@ class CellBlob:
             case _: 
                 print("Move direction not recognised!")
 
-def bind_blob(bound_blob):
-    print(f"-> Binding {bound_blob} to user input...")
-    base.accept("arrow_left", bound_blob.move, ["left"])
-    base.accept("arrow_left-repeat", bound_blob.move, ["left"])
-    base.accept("a", bound_blob.move, ["left"])
-    base.accept("a-repeat", bound_blob.move, ["left"])
-    base.accept("arrow_right", bound_blob.move, ["right"])
-    base.accept("arrow_right-repeat", bound_blob.move, ["right"])
-    base.accept("d", bound_blob.move, ["right"])
-    base.accept("d-repeat", bound_blob.move, ["right"])
-    base.accept("arrow_up", bound_blob.move, ["fwd"])
-    base.accept("arrow_up-repeat", bound_blob.move, ["fwd"])
-    base.accept("w", bound_blob.move, ["fwd"])
-    base.accept("w-repeat", bound_blob.move, ["fwd"])
-    base.accept("arrow_down", bound_blob.move, ["back"])
-    base.accept("arrow_down-repeat", bound_blob.move, ["back"])
-    base.accept("s", bound_blob.move, ["back"])
-    base.accept("s-repeat", bound_blob.move, ["back"])
+# floating resource orbs. can bind to blobs
+class Ball:
+    def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, 
+                 blob: CellBlob | None = None, index: int | None = 0, sfx = None):
+        self.type  = type
+        self.name  = name
+        self.blob  = blob           # blob that ball is attached to, if any
+        self.index = index          # helps balls rotate on the blobs neatly
+        self.sfx   = sfx            # associated noise
+        self.radius: float = .15    # personal space
+        # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
+        self.angle = 0
+        self.orbiting = True if blob is not None else False
+
+        model = base.loader.load_model("sphere.egg")
+        model.setTransparency(1)
+        ts_col = TextureStage('ts_col')
+        model.setTexture(ts_col, loader.loadTexture(self.type.value))
+        # ts_glow = TextureStage('ts_glow')
+        # ts_glow.setMode(TextureStage.MGlow)
+        # black_tex = loader.loadTexture("black.png")
+        # model.setTexture(ts_glow, black_tex)
+        model.set_scale(.06)
+        self.nodepath = base.render.attach_new_node(f"ball-{self.name}")
+        model.reparent_to(self.nodepath)
+        if self.blob is None:
+            assert pos is not None, f"A free ball must have a position!"
+            self.nodepath.set_pos(pos)                            # use given position
+        else:
+            self.nodepath.set_pos(self.blob.nodepath.get_pos() + Vec3(.5,0,.22)) # adjustments for oscillations
+        
+            base.sfx.bongs[self.blob.bong].play()
+        self.task_name = f"update_ball-{self.name}"
+        base.taskMgr.add(self.update, self.task_name)
+
+    def set_orbiting_true(self):
+        self.orbiting = True
+
+    def fly_to_target(self, target: CellBlob):
+        self.orbiting = False
+        # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)
+        ratio = (self.index+1) / self.blob.num_balls
+        elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio)   # this works if dt is in seconds (doubt, hahaha)
+        move_int = self.nodepath.posInterval(1., target.pos() + Vec3(0,0,elevation), fluid=1)
+        Sequence(
+            move_int,
+            Func(self.set_orbiting_true),
+            Func(base.sfx.bongs[target.bong].play)
+        ).start()
+
+    def update(self, task):
+        pos = self.nodepath.get_pos()                               # current ball position
+        if (self.orbiting):
+            # each ball gets a root of unity of num_balls (arrange them in an even circle)
+            ratio = (self.index + 1)/ self.blob.num_balls
+            self.angle = TAU * ratio + self.blob.spinner
+
+            elevation = self.radius*1.2 + .04 * np.sin(self.angle)  # bob up and down rhythmically
+
+            # go round in a little circle over the blob
+            aimpos = self.blob.nodepath.get_pos() + Vec3(np.cos(self.angle)/2.,
+                                            np.sin(self.angle)/2.,
+                                            elevation)
+            abs_dist: float = ABS_DIST(pos, aimpos)                 # absolute distance of that lad
+            damper = min(1, max(0, abs_dist/2))                     # 1 if far, 0 if close
+
+            self.nodepath.set_pos(pos + (aimpos-pos)*damper)        # load pos into the nodepath
+        else:
+            self.nodepath.set_pos(pos.x,pos.y,0+np.sin(globalClock.getDt())*.1)
+        return task.cont
+
+    def consume(self):
+        self.nodepath.remove_node(Thread.current_thread)
+        # play a little consume brrrrp
+        base.sfx.brrps[self.sfx].play()
+        taskMgr.remove(self.task_name)
+
 
 if __name__ == "__main__":
-    print("="*30 + "\n... Loading Blob ...")        # application entry point -----------
+    print("="*30 + "\n... Loading Blob ...")        # application entry point ---------------------
 
     print("-> Initialising ShowBase...")
     ShowBase()                                      # Showbase initialised
 
-    player_1 = CellBlob(col=Vec4(0.,0.,1.,1.))                           # CellBlob for player 1 constructed
+    base.set_background_color(.2,.2,.2,.1)
 
-    bind_blob(player_1)                             # Player 1 bound to user input
+    base.sound_fx = SoundFX()                       # initialise sound library and put in base
+    base.floating_balls = []                        # construct a list to store balls in 
+
+    # construct CellBlob for player 1
+    player_1 = CellBlob(pos=Vec3(0.,-5.,0.),col=Vec4(0.,0.,1.,1.))
+
+    BIND_BLOB(player_1)                             # Player 1 bound to user input
+
+    # make a test ball to collect
+    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,-2.,0.))
 
     base.cam.setPos(0,-18,5)                        # Adjust camera position and angle
     base.cam.setHpr(0,-15,0)
