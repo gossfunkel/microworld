@@ -2,15 +2,16 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName,
-    Shader, ShaderBuffer, ComputeNode, TextureStage, Thread
+    Shader, ShaderBuffer, ComputeNode, TextureStage, Thread, UserDataAudio
 )
 import struct
 from enum import Enum
 from scipy.signal import chirp
 import numpy as np
 
-EPSILON = 0.0001
-radius = 1.
+EPSILON    = 0.0001
+TAU        = np.pi * 2.
+radius     = 1.
 BASIS_VECS = [0.,     0.,
               -.866, -.5,
               -.5,   -.866,
@@ -130,9 +131,10 @@ class BallType(Enum):
 class SoundFX:
     def __init__(self):
         self.bongs = []
-        self.brrps = []
+        self.bong_300 = self.add_bong(300)
+        self.brrp_consume = self._gen_brrp()
 
-    def add_bong(self, freq: int, length: int = 6000, atk: int = 400) -> int:
+    def _gen_bong(self, freq: int, length: int = 6000, atk: int = 400) -> int:
         freq_scale = length / 48000                                             # translate length into seconds
         atk: np.array = np.linspace(0,1,atk, dtype=np.float32)                  # ascending attack
         dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
@@ -142,26 +144,25 @@ class SoundFX:
         bong_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
         bong_audio_buff.append(BONG_SAMPLE.tobytes())                           # add sample
         bong_audio_buff.done()
-        self.bongs.append(base.loader.loadSfx(bong_audio_buff))                 # load buffer to bongs list
-        return len(self.bongs)-1                                                # return index of bong
+        return base.loader.loadSfx(bong_audio_buff)                             # load sample and return
 
-    def add_brrp(self, length=3200) -> int:
+    def _gen_brrp(self, length=3200) -> int:
         freq_scale: float = length / 48000                                      # translate length into seconds
         atk: np.array = np.linspace(0,1,2500, dtype=np.float32)                 # ascending attack
         dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
         env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
         amp: float    = .2
-        BRRP_SAMPLE = np.array(chirp(np.linspace(0,1,length,endpoint=False),    # return value from scipy.signal.chirp with our parameters
+        BRRP_SAMPLE = np.array(chirp(np.linspace(0,1,length,endpoint=False),    # get value from scipy.signal.chirp with our parameters
                                      f0=450,
                                      f1=1000, 
                                      t1=freq_scale, 
                                      method='hyperbolic') * env  * 32767 * amp, dtype=np.int16)
-        BRRP_SAMPLE_2 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+        BRRP_SAMPLE_2 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # get 'echo' 1
                                      f0=300,
                                      f1=700, 
                                      t1=freq_scale, 
                                      method='hyperbolic') * env  * 32767 * (amp*.5), dtype=np.int16)
-        BRRP_SAMPLE_3 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # return value from scipy.signal.chirp with our parameters
+        BRRP_SAMPLE_3 = np.array(chirp(np.linspace(0,1,length,endpoint=False),  # get 'echo' 2
                                      f0=150,
                                      f1=400, 
                                      t1=freq_scale, 
@@ -171,8 +172,11 @@ class SoundFX:
         brrp_audio_buff = UserDataAudio(48000,1,False)                          # create audio buffer view
         brrp_audio_buff.append(BRRP_SAMPLE.tobytes())                           # add sample
         brrp_audio_buff.done()
-        self.brrps.append(base.loader.loadSfx(brrp_audio_buff))                 # load buffer to brrps list
-        return len(self.brrps)-1                                                # return index of brrp
+        return base.loader.loadSfx(brrp_audio_buff)                             # load sample and return
+
+    def add_bong(self, freq: int):
+        self.bongs.append(self._gen_bong(freq))                                 # load buffer to bongs list
+        return len(self.bongs)-1                                                # return index of bong
 
 class CellBlob:
     # initialise a circle with 1 inner and 12 outer vertices, with compute-managed animation
@@ -235,6 +239,7 @@ class CellBlob:
                 base.floating_balls.remove(item)
                 item.nodepath.remove_node(Thread.current_thread)
                 taskMgr.remove(item.task_name)
+                base.sound_fx.brrp_consume.play()
 
         # update nodepath position by velocity
         self.nodepath.set_pos(pos + Vec3(self.vel, 0.))
@@ -352,7 +357,7 @@ if __name__ == "__main__":
     base.accept("escape", base.userExit)            # hit `Esc` to quickly quit the game
 
     # make a test ball to collect
-    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,2.,0.))
+    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,-2.,0.))
     base.floating_balls.append(test_ball_1)
 
     base.cam.setPos(0,-18,5)                        # Adjust camera position and angle
