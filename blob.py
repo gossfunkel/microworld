@@ -2,7 +2,7 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4, Geom, GeomNode, GeomEnums, NodePath, BoundingBox,
     GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, InternalName,
-    Shader, ShaderBuffer, ComputeNode, TextureStage
+    Shader, ShaderBuffer, ComputeNode, TextureStage, Thread
 )
 import struct
 from enum import Enum
@@ -113,6 +113,11 @@ def BIND_BLOB(bound_blob):
     base.accept("s", bound_blob.move, ["back"])
     base.accept("s-repeat", bound_blob.move, ["back"])
 
+def ABS_DIST(a: Vec3, b: Vec3) -> float:
+    return np.sqrt((a.x-b.x)*(a.x-b.x) + 
+                   (a.y-b.y)*(a.y-b.y) +
+                   (a.z-b.z)*(a.z-b.z))
+
 # Enum relating Ball types to image files
 class BallType(Enum):
     MANA = "teal.png"       # energy sources - electron transfer agents
@@ -219,16 +224,20 @@ class CellBlob:
         #vtx_view = memoryview(nodepath.node().get_vertex_data().modify_array(0)).cast('f')
         #print(f"some verts: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
+        pos = self.nodepath.get_pos()
+
         # naive collision check with items - TODO spacial hashing
         for item in base.floating_balls:
-            if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
+            if ABS_DIST(pos, Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
                 #self.add_ball(item)
                 self.radius *= 1.1
                 self.comp_np.set_shader_input("radius", self.radius)
-                base.floating_items.remove(item)
+                base.floating_balls.remove(item)
+                item.nodepath.remove_node(Thread.current_thread)
+                taskMgr.remove(item.task_name)
 
         # update nodepath position by velocity
-        self.nodepath.set_pos(self.nodepath.get_pos() + Vec3(self.vel, 0.))
+        self.nodepath.set_pos(pos + Vec3(self.vel, 0.))
         self.nodepath.set_shader_input("model_velocity", self.vel)
         self.vel = self.vel/2. if self.vel > EPSILON else Vec2(0.,0.)     # friction slows us
 
@@ -262,9 +271,9 @@ class Ball:
         self.orbiting = True if blob is not None else False
 
         model = base.loader.load_model("sphere.egg")
-        model.setTransparency(1)
+        #model.setTransparency(1)
         ts_col = TextureStage('ts_col')
-        model.setTexture(ts_col, loader.loadTexture(self.type.value))
+        model.setTexture(loader.loadTexture(self.type.value))
         # ts_glow = TextureStage('ts_glow')
         # ts_glow.setMode(TextureStage.MGlow)
         # black_tex = loader.loadTexture("black.png")
@@ -340,9 +349,11 @@ if __name__ == "__main__":
     player_1 = CellBlob(pos=Vec3(0.,-5.,0.),col=Vec4(0.,0.,1.,1.))
 
     BIND_BLOB(player_1)                             # Player 1 bound to user input
+    base.accept("escape", base.userExit)            # hit `Esc` to quickly quit the game
 
     # make a test ball to collect
-    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,-2.,0.))
+    test_ball_1 = Ball(BallType.FOOD, f"ball-{len(base.floating_balls)}", pos=Vec3(0.,2.,0.))
+    base.floating_balls.append(test_ball_1)
 
     base.cam.setPos(0,-18,5)                        # Adjust camera position and angle
     base.cam.setHpr(0,-15,0)
