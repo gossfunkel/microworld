@@ -32,6 +32,8 @@ test_model = loader.loadModel("blob_default.bam")
 test_model.reparent_to(render)
 test_model.set_pos(0.,0.,0.)
 
+test_model.node().modify_geom(0).make_nonindexed(False)
+
 test_model.set_depth_offset(1)
 
 load_data = test_model.node().get_geom(0).get_vertex_data()
