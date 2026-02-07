@@ -51,9 +51,12 @@ CONFIG: str = """
 gl-version 4 3
 gl-debug true
 gl-debug-buffers true
+//gl-force-glsl-version 430
+gl-support-spirv false
 //premunge-data false
 win-size 1200 800
 //show-frame-rate-meter true
+//model-cache-compiled-shaders false
 hardware-animated-vertices true
 framebuffer-srgb true
 //basic-shaders-only false
@@ -157,7 +160,10 @@ class Blob:
         self.nodepath.setDepthOffset(1)
 
         # activate the jiggle shader on the blob
+        #jiggle_vert  = Shader.load("blob_jiggle.vert", Shader.SL_GLSL)
+        #default_frag = Shader.load("default_shader.frag", Shader.SL_GLSL)
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
+        #self.nodepath.set_shader(Shader.make(Shader.SL_GLSL, vertex=jiggle_vert, fragment=default_frag))
         self.nodepath.set_shader_input("ssbo", self.buffer)
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
@@ -261,7 +267,7 @@ class Ball:
         self.name  = name
         self.blob  = blob           # blob that ball is attached to, if any
         self.index = index          # helps balls rotate on the blobs neatly
-        self.sfx   = sfx            # associated noise
+        self.sfx   = sfx            # associated sound effect
         self.radius: float = .15    # personal space
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
         self.angle = 0
@@ -337,7 +343,7 @@ class GameBase(ShowBase):
         ShowBase.__init__(self)
         self.set_background_color(0.12,0.05,0.22,1.)              # dark background
 
-        render.setAntialias(AntialiasAttrib.MAuto)                # set global antialiasing
+        #render.setAntialias(AntialiasAttrib.MAuto)                # set global antialiasing
         #render.setShaderAuto()
 
         self.sfx = SoundFX()                                      # initialise sound effect library
