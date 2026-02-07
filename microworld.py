@@ -91,7 +91,7 @@ class SoundFX:
 
     def add_brrp(self, length=3200) -> int:
         freq_scale: float = length / 48000                                      # translate length into seconds
-        atk: np.array = np.linspace(0,1,2500, dtype=np.float32)                 # ascending attack
+        atk: np.array = np.linspace(0,1,1800, dtype=np.float32)                 # ascending attack
         dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
         env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
         amp: float    = .2
@@ -122,13 +122,20 @@ class SoundFX:
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
-        self.type           = type
         self.name           = name
         self.col: tuple     = col
+
         self.radius: float  = 2.
-        self.verts: int     = 12        # number of OUTER vertices (blob requires centre)
-        self.velocity       = Vec2(0.,0.)
-        self.colliding      = False
+        self.verts: int     = 12            # number of OUTER vertices (blob requires centre)
+        self.velocity       = Vec2(0.,0.)   # initial speed
+        self.colliding      = False         # flag for if blob is colliding with something
+
+        self.max_hp: float  = 10.           # maximum health
+        self.hp: float      = self.max_hp   # current health
+        self.max_nrg: float = 10.           # maximum energy
+        self.nrg: float     = self.max_nrg  # current energy
+        self.nrg_loss_rate  = .001          # rate of energy loss BALANCE
+        self.speed: float   = .05
 
         # load the default blob from file
         # self.nodepath = loader.loadModel("blob_default.bam")
@@ -184,47 +191,93 @@ class Blob:
         return self.nodepath.get_pos()
 
     def grow(self):
+        self.max_hp += 1.                                     # increase maximum health
         self.radius *= 1.1                                    # make the blob bigger
-        # TODO update the basis vecs
+        self.nrg_loss_rate += .001                            # lose energy faster BALANCE
         self.nodepath.set_shader_input("radius", self.radius) # update the shader
 
-    def add_ball(self, ball=None, balls: int = 1):
-        # print(f"adding ball to {self.name}")
-        if isinstance(ball,type(None)): # make a new mana ball
-            # FIXME this will break when a ball is generated after giving one away due to names
-            self.balls.append(Ball(BallType.MANA, self.name+"-ball-"+str(self.num_balls), blob=self, index=self.num_balls))
-            self.num_balls += 1
+    def make_ball(self, *balls: BallType):
+        if self.nrg > 1.:
+            for ball in balls:
+                self.nrg -= 1.
+                match ball:
+                    case BallType.FRNA:
+                        self.balls.append(Ball(BallType.FRNA, self.name+"-FRNAball-"+str(self.num_balls), 
+                                               blob=self, index=self.num_balls))
+                        self.num_balls += 1
+                    case BallType.FOOD:
+                        self.balls.append(Ball(BallType.FOOD, self.name+"-FOODball-"+str(self.num_balls), 
+                                               blob=self, index=self.num_balls))
+                        self.num_balls += 1
         else:
-            if ball.type is BallType.FOOD:
+            print("DANGER: Insufficient energy!")
+
+    def consume_ball(self, ball=None):
+        if isinstance(ball,type(None)): # consume the first ball in the buffer
+            if len(self.balls) > 0:
+                ball = self.balls[0]
+                ball.consume()
+                del self.balls[0]
+            else:
+                print("No balls to consume!")
+                return;
+        else:
+            ball.consume()
+
+        match ball.type:
+            case BallType.FOOD:
                 ball.consume()
                 self.grow()
                 # TODO add vertex
                 # TODO update VBO on adding/removing verts
-            else:
-                self.balls.append(ball)     # add ball to balls
-                ball.blob = self            # change ball references to self
-                ball.index = self.num_balls # n.b. this is only incremented after this, so the index is correct
-                ball.set_orbiting_true()
-                base.sfx.bongs[self.bong].play()
-                self.num_balls += 1
+            case BallType.HEAL:
+                ball.consume()
+                # no overhealing - just top up health to maximum health at most
+                self.hp = min(self.max_hp, self.hp + 1.)
+            case BallType.MANA:
+                ball.consume()
+                self.nrg = min(self.max_nrg, self.nrg + 1.)
+            case BallType.SALT:
+                ball.consume()
+                self.nrg_loss_rate *= .75       # reduce energy loss rate by a quarter BALANCE
+            case BallType.FRNA:
+                print("Power up!")
+                # TODO metabolic objectives; growing utilities. Menu or progression? Unlocks?
+                self.speed *= 1.5               # increase blob speed
 
-    def give_ball(self, blob):
-        if self.num_balls > 0:
-            given_ball = self.balls[self.num_balls-1]
-            base.sfx.bongs[self.bong].play()
-            blob.add_ball(given_ball)
-            self.balls.remove(given_ball)
-            given_ball.fly_to_target(blob)
-            # print(f"{self.name} gave 1 ball to {blob.name}")
-            self.num_balls -= 1
-        else: 
-            print("No balls to give!")
+
+    def add_ball(self, ball=None, balls: int = 1):
+        print(f"adding ball to {self.name}")
+        self.balls.append(ball)          # add ball to balls
+        ball.blob = self                 # change ball references to self
+        ball.index = self.num_balls      # n.b. this is only incremented after this, so the index is correct
+        ball.set_orbiting_true()
+        base.sfx.bongs[self.bong].play() # make a jubilant bong
+        self.num_balls += 1              # incremement ball count
+
+    # def give_ball(self, blob):
+    #     if self.num_balls > 0:
+    #         given_ball = self.balls[self.num_balls-1]
+    #         base.sfx.bongs[self.bong].play()
+    #         blob.add_ball(given_ball)
+    #         self.balls.remove(given_ball)
+    #         given_ball.fly_to_target(blob)
+    #         # print(f"{self.name} gave 1 ball to {blob.name}")
+    #         self.num_balls -= 1
+    #     else: 
+    #         print("No balls to give!")
 
     def update(self, task):
-        # processor-killing debug
+        # processor-killing debug:
         #print(f"blob {self.name} nodepath position: {self.pos()}")
         #vtx_view = memoryview(self.nodepath.node().get_vertex_data().modify_array(0)).cast('B').cast('f')
         #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
+
+        # tick energy loss
+        self.nrg -= self.nrg_loss_rate
+
+        if self.nrg <= 0:
+            self.die()
 
         # naive collision check with items - TODO spacial hashing
         for item in base.floating_items:
@@ -242,27 +295,34 @@ class Blob:
     # move the blob by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
-        #gsg = base.win.get_gsg()
         match direction:
-            case "left":             # go left              SSBO         GSG  NEW_VEL     OFFSET (array 1 row 0 col 1: 48+8= 56B)
-                self.velocity -=  Vec2(.05,0.)
-                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 56)
-            case "right":                       # go right
-                self.velocity +=  Vec2(.05,0.)
-                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05),  56)
-            case "fwd":                         # go forwards                             (array 1 row 0 col 1 comp 1: 48+8+4= 60B)
-                self.velocity +=  Vec2(0.,.05)
-                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(.05), 60)
-            case "back":                        # ...you guessed it
-                self.velocity -=  Vec2(0.,.05)
-                #base.graphics_engine.update_shader_buffer_data(self.buffer, gsg, bytes(-.05), 60)
+            case "left":                                            # go left
+                self.velocity -=  Vec2(self.speed,0.)
+            case "right":                                           # go right
+                self.velocity +=  Vec2(self.speed,0.)
+            case "fwd":                                             # go forwards
+                self.velocity +=  Vec2(0.,self.speed)
+            case "back":                                            # ...you guessed it
+                self.velocity -=  Vec2(0.,self.speed)
             case _: 
                 print("Move direction not recognised!")
+
+    def die(self):
+        # drop balls
+        for ball in self.balls:
+            ball.orbiting = False
+            ball.blob = None
+            ball.index = None
+            base.floating_items.append(ball)
+        # die
+        taskMgr.remove(self.name+"-update")
+        if self.name == "p1":
+            base.game_over()
 
 # floating resource orbs. can bind to blobs
 class Ball:
     def __init__(self, type: BallType, name: str, pos: Vec3 | None = None, 
-                 blob: Blob | None = None, index: int | None = 0, sfx = None):
+                 blob: Blob | None = None, index: int | None = None, sfx = None):
         self.type  = type
         self.name  = name
         self.blob  = blob           # blob that ball is attached to, if any
@@ -287,10 +347,11 @@ class Ball:
         if self.blob is None:
             assert pos is not None, f"A free ball must have a position!"
             self.nodepath.set_pos(pos)                              # use given position
+            self.sfx = base.sfx.brrps[0]
         else:
             self.nodepath.set_pos(self.blob.pos() + Vec3(.5,0,.22)) # adjustments for oscillations
-        
-            base.sfx.bongs[self.blob.bong].play()                   # play bong
+            self.sfx = base.sfx.bongs[self.blob.bong]               # set sound effect to blob bong
+            self.sfx.play()                                         # play bong
         self.task_name = f"update_ball-{self.name}"
         base.taskMgr.add(self.update, self.task_name)               # add update to taskMgr
 
@@ -332,21 +393,22 @@ class Ball:
 
     def consume(self):
         self.nodepath.remove_node(Thread.current_thread)
-        base.sfx.brrps[self.sfx].play()
+        self.sfx.play()                                             # play a little consume brrrrp 
         taskMgr.remove(self.task_name)
         #if self.blob is not None:
         #    self.blob.remove_blob(self)
-        # play a little consume brrrrp
+        
 
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
-        self.set_background_color(0.12,0.05,0.22,1.)              # dark background
+        self.set_background_color(0.12,0.05,0.22,1.)                # dark background
 
-        #render.setAntialias(AntialiasAttrib.MAuto)                # set global antialiasing
+        #render.setAntialias(AntialiasAttrib.MAuto)                 # set global antialiasing
         #render.setShaderAuto()
 
-        self.sfx = SoundFX()                                      # initialise sound effect library
+        self.sfx = SoundFX()                                        # initialise sound effect library
+        self.sfx.brrps.append(self.sfx.add_brrp(2800))              # initialise default ball brrp
 
         # big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
         # big_light_np.node().setShadowCaster(True, 512, 512)
@@ -354,14 +416,14 @@ class GameBase(ShowBase):
         # big_light_np.setHpr(20, -80, 0)
         # render.setLight(big_light_np)                             # set a warm directional light on the whole scene
 
-        self.p1 = Blob("p1",Vec2(0.,-5.),Vec4(0.,0.,1.,1.), 200)  # create a test blob
-        self.p2 = Blob("p2",Vec2(0., 5.),Vec4(0.,1.,0.,1.), 300)  # create a second test blob
+        self.p1 = Blob("p1",Vec2(0.,-5.),Vec4(0.,0.,1.,1.), 200)    # create a test blob
+        self.p2 = Blob("p2",Vec2(0., 5.),Vec4(0.,1.,0.,1.), 300)    # create a second test blob
 
         self.p1_label = TextNode("p1 balls: ")
         self.p1_label.setTextColor(1,1,1,1)
         self.p1_label.setTextScale(0.1)
         p1_label_np = aspect2d.attach_new_node(self.p1_label)
-        p1_label_np.set_pos((1.,0.,.85))
+        p1_label_np.set_pos((.8,0.,.6))
         self.p1_label_v = TextNode("0")
         self.p1_label_v.setTextColor(1,1,1,1)
         self.p1_label_v.setTextScale(0.1)
@@ -372,7 +434,7 @@ class GameBase(ShowBase):
         self.p2_label.setTextColor(1,1,1,1)
         self.p2_label.setTextScale(0.1)
         p2_label_np = aspect2d.attach_new_node(self.p2_label)
-        p2_label_np.set_pos((1.,0.,.7))
+        p2_label_np.set_pos((.8,0.,.6))
         self.p2_label_v = TextNode("0")
         self.p2_label_v.setTextColor(1,1,1,1)
         self.p2_label_v.setTextScale(0.1)
@@ -380,8 +442,15 @@ class GameBase(ShowBase):
         p2_label_v_np.set_pos((1.3,0.,.7))
         # self.p2_label.set_transparency(1)
 
+        self.energy_label_v = TextNode("0")
+        self.energy_label_v.setTextColor(.6,.6,1.,1.)
+        self.energy_label_v.setTextScale(0.1)
+        energy_label_v_np = aspect2d.attach_new_node(self.energy_label_v)
+        energy_label_v_np.set_pos((-1.3,0.,.85))
+        
+
         # TODO: Nodepath or spacial partitioning
-        self.floating_items = []                          # big list of all nearby collectable items
+        self.floating_items = []                                    # big list of all nearby collectable items
 
         # awsd/keypad movement for p1 blob
         self.accept("arrow_left", self.p1.move, ["left"])
@@ -401,16 +470,14 @@ class GameBase(ShowBase):
         self.accept("s", self.p1.move, ["back"])
         self.accept("s-repeat", self.p1.move, ["back"])
         
-        self.accept("b", self.p1.add_ball)                  # allow player to spawn balls
-        self.accept("space", self.p1.give_ball, [self.p2])  # allow player to gift balls 
+        self.accept("r", self.p1.make_ball, [BallType.FRNA])        # make an frna ball from energy
+        self.accept("f", self.p1.make_ball, [BallType.FOOD])        # make an frna ball from energy
+        self.accept("space", self.p1.consume_ball)                  # consume a ball
 
-        self.accept("escape", self.userExit)                # quickly quit the game
+        self.accept("escape", self.userExit)                        # quickly quit the game
 
-        self.cam.setPos(CAM_POS)                            # spawn camera distance from origin
-        self.cam.setHpr(0,-22,0)                            # look down at your blob! 
-
-        #filters = CommonFilters(self.win, self.cam)         # bloom/glow
-        #filters.setBloom(blend=(0,0,0,1), size="small", desat=0)
+        self.cam.setPos(CAM_POS)                                    # spawn camera distance from origin
+        self.cam.setHpr(0,-22,0)                                    # look down at your blob! 
 
         self.taskMgr.add(self.update, "update")
         # TODO spacial partitioning 
@@ -423,27 +490,34 @@ class GameBase(ShowBase):
         # update UI
         self.p1_label_v.setText(str(self.p1.num_balls))
         self.p2_label_v.setText(str(self.p2.num_balls))
+        self.energy_label_v.setText(str(self.p1.nrg)[:4])
         return task.cont
+
+    def game_over(self):
+        # TODO show game over screen
+        print("\t\t=== GAME OVER ===")
+        print(" You ran out of energy! ")
+        self.userExit()
 
     def __del__(self):
         print("="*20 + " See you soon!:) " + 20*"=")
 
 if __name__ == "__main__":
     print("="*20 + " Welcome to microworld! v0.0.1 " + 20*"=")
-    base = GameBase()                                       # Showbase initialised
+    base = GameBase()                                               # Showbase initialised
 
     hp_ball_pos_1 = Vec3(-4,0,0)
     hp_ball_pos_2 = Vec3(3,-2,0)
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_1))
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_2))
-    atk_ball_pos_1 = Vec3(-2,3,0)
-    base.floating_items.append(Ball(BallType.FRNA, f"ball-{len(base.floating_items)}", pos=atk_ball_pos_1))
-    food_ball_pos_1 = Vec3(4,4,0)
-    food_ball_pos_2 = Vec3(0,-2,0)
-    food_ball_sfx = base.sfx.add_brrp()
-    base.floating_items.append(Ball(BallType.FOOD, f"ball-{len(base.floating_items)}", 
-                                    pos=food_ball_pos_1, sfx=food_ball_sfx))
-    base.floating_items.append(Ball(BallType.FOOD, f"ball-{len(base.floating_items)}", 
-                                    pos=food_ball_pos_2, sfx=food_ball_sfx))
+    salt_ball_pos_1 = Vec3(-2,3,0)
+    base.floating_items.append(Ball(BallType.SALT, f"ball-{len(base.floating_items)}", pos=salt_ball_pos_1))
+    mana_ball_pos_1 = Vec3(4,4,0)
+    mana_ball_pos_2 = Vec3(0,-2,0)
+    mana_ball_sfx = base.sfx.add_brrp(2100)
+    base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
+                                    pos=mana_ball_pos_1, sfx=mana_ball_sfx))
+    base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
+                                    pos=mana_ball_pos_2, sfx=mana_ball_sfx))
 
-    base.run()                                              # taskMgr blocks
+    base.run()                                                      # taskMgr blocks
