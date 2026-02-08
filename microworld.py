@@ -300,7 +300,7 @@ class Blob:
         # die
         taskMgr.remove(self.name+"-update")
         if self.name == "p1":
-            if self.energy <= 0.:
+            if self.nrg <= 0.:
                 base.game_over(" You ran out of energy! ")
             elif self.hp <= 0.:
                 base.game_over(" Your health ran out! ")
