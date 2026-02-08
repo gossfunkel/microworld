@@ -213,6 +213,10 @@ class CellBlob:
         #geom.doublesideInPlace()
         geom_node = GeomNode('blob-geom_node')
         geom_node.addGeom(geom)
+        
+        #jiggle_vert  = Shader.load("blob_jiggle.vert", Shader.SL_GLSL)
+        #default_frag = Shader.load("default_shader.frag", Shader.SL_GLSL)
+        #self.nodepath.set_shader(Shader.make(Shader.SL_GLSL, vertex=jiggle_vert, fragment=default_frag))
 
         print("-> Composing blob NodePath...")
         self.nodepath = base.render.attach_new_node(geom_node)              # make nodepath

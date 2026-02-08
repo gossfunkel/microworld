@@ -124,36 +124,32 @@ class SoundFX:
 class Blob:
     def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float) -> None:
         # TODO move data into C++ obj tags or VBO
-        self.name           = name
-        self.col: tuple     = col
+        self.name            = name
+        self.col: tuple      = col
 
-        self.radius: float  = 2.
-        self.verts: int     = 12            # number of OUTER vertices (blob requires centre)
-        self.velocity       = Vec2(0.,0.)   # initial speed
-        self.colliding      = False         # flag for if blob is colliding with something
+        self.radius: float   = 2.
+        self.verts: int      = 12            # number of OUTER vertices (blob requires centre)
+        self.velocity        = Vec2(0.,0.)   # initial speed
+        self.colliding       = False         # flag for if blob is colliding with something
 
-        self.max_hp: float  = 10.           # maximum health
-        self.hp: float      = self.max_hp   # current health
-        self.max_nrg: float = 10.           # maximum energy
-        self.nrg: float     = self.max_nrg  # current energy
-        self.nrg_loss_rate  = .001          # rate of energy loss BALANCE
-        self.speed: float   = .05
+        self.max_hp: float   = 10.           # maximum health
+        self.hp: float       = self.max_hp   # current health
+        self.max_nrg: float  = 10.           # maximum energy
+        self.nrg: float      = self.max_nrg  # current energy
+        self.nrg_loss_rate   = .001          # rate of energy loss BALANCE
+        self.speed: float    = 1.            # amount to add to position per frame per dt
+        self.salinity: float = 0.            # current salt level
 
+        print(f"Loading {self.name} VBO data...")
         # load the default blob from file
-        # self.nodepath = loader.loadModel("blob_default.bam")
-        # self.nodepath.set_color(col)
-        #with loaded_file as BamFile():
         loaded_file = BamFile()
         loaded_file.open_read("blob_default.bam")
         node = loaded_file.read_node()
         loaded_file.close()
 
-        print("Loading VBO data...")
-
         # modify geom vertex data from file
-        #print(node.get_child(0).get_geom(0))
+        #print(node.get_child(0).get_geom(0))#print(f"VBO data from file: {vtx_data}")
         vtx_data = node.get_child(0).get_geom(0).get_vertex_data()
-        #print(f"VBO data from file: {vtx_data}")
 
         # make an SSBO from the model data for vertex pulling
         p3d_array = vtx_data.get_array_handle(0).get_data()
@@ -169,20 +165,17 @@ class Blob:
         self.nodepath.setDepthOffset(1)
 
         # activate the jiggle shader on the blob
-        #jiggle_vert  = Shader.load("blob_jiggle.vert", Shader.SL_GLSL)
-        #default_frag = Shader.load("default_shader.frag", Shader.SL_GLSL)
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="blob_jiggle.vert", fragment="default_shader.frag"))
-        #self.nodepath.set_shader(Shader.make(Shader.SL_GLSL, vertex=jiggle_vert, fragment=default_frag))
         self.nodepath.set_shader_input("ssbo", self.buffer)
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
 
         # now set up accessories
-        self.bong           = base.sfx.add_bong(bong_freq)  # generate sound effect at given freq
-        self.balls          = []                            # array for balls on blob
-        self.spinner: float = 0                             # this tells balls on this blob how to rotate neatly
-        self.num_balls: int = len(self.balls)               # to help with angle calculations
+        self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
+        self.balls          = []                                    # array for balls on blob
+        self.spinner: float = 0                                     # this tells balls on this blob how to rotate neatly
+        self.num_balls: int = len(self.balls)                       # to help with angle calculations
 
         base.taskMgr.add(self.update, str(name)+"-update")
 
@@ -193,10 +186,10 @@ class Blob:
         return self.nodepath.get_pos()
 
     def grow(self):
-        self.max_hp += 1.                                     # increase maximum health
-        self.radius *= 1.1                                    # make the blob bigger
-        self.nrg_loss_rate += .001                            # lose energy faster BALANCE
-        self.nodepath.set_shader_input("radius", self.radius) # update the shader
+        self.max_hp += 1.                                           # increase maximum health
+        self.radius *= 1.1                                          # make the blob bigger
+        self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
+        self.nodepath.set_shader_input("radius", self.radius)       # update the shader
 
     def make_ball(self, *balls: BallType):
         if self.nrg > 1.:
@@ -215,59 +208,45 @@ class Blob:
             print("DANGER: Insufficient energy!")
 
     def consume_ball(self, ball=None):
-        if isinstance(ball,type(None)): # consume the first ball in the buffer
+        if isinstance(ball,type(None)):                             # consume the first ball in the buffer
             if len(self.balls) > 0:
                 ball = self.balls[0]
                 ball.consume()
                 del self.balls[0]
+                self.num_balls -= 1
             else:
-                print("No balls to consume!")
+                print("No balls to consume!")                       # consumption failed, return
                 return;
         else:
             ball.consume()
+            del ball
 
-        match ball.type:
+        match ball.type:                                            # activate the appropriate effect
             case BallType.FOOD:
-                ball.consume()
                 self.grow()
                 # TODO add vertex
                 # TODO update VBO on adding/removing verts
             case BallType.HEAL:
-                ball.consume()
                 # no overhealing - just top up health to maximum health at most
                 self.hp = min(self.max_hp, self.hp + 1.)
             case BallType.MANA:
-                ball.consume()
                 self.nrg = min(self.max_nrg, self.nrg + 1.)
             case BallType.SALT:
-                ball.consume()
-                self.nrg_loss_rate *= .75       # reduce energy loss rate by a quarter BALANCE
+                self.salinity += 1.                                 # TODO salinity moves energy loss to hp loss
+                self.nrg_loss_rate *= .75                           # reduce energy loss rate by a quarter BALANCE
             case BallType.FRNA:
                 print("Power up!")
                 # TODO metabolic objectives; growing utilities. Menu or progression? Unlocks?
-                self.speed *= 1.5               # increase blob speed
-
+                self.speed *= 1.5                                   # increase blob speed
 
     def add_ball(self, ball=None, balls: int = 1):
         print(f"adding ball to {self.name}")
-        self.balls.append(ball)          # add ball to balls
-        ball.blob = self                 # change ball references to self
-        ball.index = self.num_balls      # n.b. this is only incremented after this, so the index is correct
-        ball.set_orbiting_true()
-        base.sfx.bongs[self.bong].play() # make a jubilant bong
-        self.num_balls += 1              # incremement ball count
-
-    # def give_ball(self, blob):
-    #     if self.num_balls > 0:
-    #         given_ball = self.balls[self.num_balls-1]
-    #         base.sfx.bongs[self.bong].play()
-    #         blob.add_ball(given_ball)
-    #         self.balls.remove(given_ball)
-    #         given_ball.fly_to_target(blob)
-    #         # print(f"{self.name} gave 1 ball to {blob.name}")
-    #         self.num_balls -= 1
-    #     else: 
-    #         print("No balls to give!")
+        self.balls.append(ball)                                     # add ball to balls
+        ball.blob = self                                            # change ball references to self
+        ball.index = self.num_balls                                 # n.b. this is only incremented at the end of method
+        ball.set_orbiting_true()                                    # make ball orbit
+        base.sfx.bongs[self.bong].play()                            # make a jubilant bong
+        self.num_balls += 1                                         # incremement ball count
 
     def update(self, task):
         # processor-killing debug:
@@ -278,7 +257,7 @@ class Blob:
         # tick energy loss
         self.nrg -= self.nrg_loss_rate
 
-        if self.nrg <= 0:
+        if (self.nrg <= 0.) or (self.hp <= 0.):
             self.die()
 
         # naive collision check with items - TODO spacial hashing
@@ -289,7 +268,8 @@ class Blob:
 
         self.nodepath.set_pos(self.pos() + Vec3(self.velocity, 0.))
         self.nodepath.set_shader_input("model_velocity", self.velocity)
-        self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) # friction slows us
+        # blob experiences friction, causing velocity to naturally decrease
+        self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) 
 
         self.spinner += (globalClock.getDt())%360
         return task.cont
@@ -297,15 +277,16 @@ class Blob:
     # move the blob by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
+        speed = self.speed * globalClock.getDt()
         match direction:
             case "left":                                            # go left
-                self.velocity -=  Vec2(self.speed,0.)
+                self.velocity -=  Vec2(speed,0.)
             case "right":                                           # go right
-                self.velocity +=  Vec2(self.speed,0.)
+                self.velocity +=  Vec2(speed,0.)
             case "fwd":                                             # go forwards
-                self.velocity +=  Vec2(0.,self.speed)
+                self.velocity +=  Vec2(0.,speed)
             case "back":                                            # ...you guessed it
-                self.velocity -=  Vec2(0.,self.speed)
+                self.velocity -=  Vec2(0.,speed)
             case _: 
                 print("Move direction not recognised!")
 
@@ -319,7 +300,12 @@ class Blob:
         # die
         taskMgr.remove(self.name+"-update")
         if self.name == "p1":
-            base.game_over()
+            if self.energy <= 0.:
+                base.game_over(" You ran out of energy! ")
+            elif self.hp <= 0.:
+                base.game_over(" Your health ran out! ")
+            else:
+                base.game_over(" You died! ")
 
 # floating resource orbs. can bind to blobs
 class Ball:
@@ -418,40 +404,44 @@ class GameBase(ShowBase):
         # big_light_np.setHpr(20, -80, 0)
         # render.setLight(big_light_np)                             # set a warm directional light on the whole scene
 
-        self.p1 = Blob("p1",Vec2(-5., 0.),Vec4(0.,0.,1.,1.), 200)    # create player 1's blob
-        self.p2 = Blob("p2",Vec2(0., 50.),Vec4(0.,1.,0.,1.), 300)    # create a second blob
+        self.p1 = Blob("p1",Vec2(0., 0.),Vec4(0.,0.,1.,1.), 200)    # create player 1's blob
+        self.p2 = Blob("p2",Vec2(0., 50.),Vec4(0.,1.,0.,1.), 300)   # create a second blob
+
+        # ball counters
         self.p1_label_v = TextNode("0")
         self.p1_label_v.setTextColor(1,1,1,1)
         self.p1_label_v.setTextScale(0.1)
         p1_label_v_np = aspect2d.attach_new_node(self.p1_label_v)
         p1_label_v_np.set_pos((1.3,0.,.85))
         
-        self.p2_label_v = TextNode("0")
-        self.p2_label_v.setTextColor(1,1,1,1)
-        self.p2_label_v.setTextScale(0.1)
-        p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
-        p2_label_v_np.set_pos((1.3,0.,.7))
+        # self.p2_label_v = TextNode("0")
+        # self.p2_label_v.setTextColor(1,1,1,1)
+        # self.p2_label_v.setTextScale(0.1)
+        # p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
+        # p2_label_v_np.set_pos((1.3,0.,.7))
         
+        # energy HUD
         self.nrg_label = TextNode("nrg_label")
         self.nrg_label.setTextColor(.5,.5,1,1)
         self.nrg_label.setTextScale(0.1)
         self.nrg_label.setText("ENERGY:")
         nrg_label_np = aspect2d.attach_new_node(self.nrg_label)
         nrg_label_np.set_pos((-1.4,0.,-.85))
-
+        # energy HUD value output
         self.energy_label_v = TextNode("0")
         self.energy_label_v.setTextColor(.6,.6,1.,1.)
         self.energy_label_v.setTextScale(0.1)
         energy_label_v_np = aspect2d.attach_new_node(self.energy_label_v)
         energy_label_v_np.set_pos((-.98,0.,-.85))
 
+        # health HUD
         self.hp_label = TextNode("hp_label")
         self.hp_label.setTextColor(.5,1,.5,1)
         self.hp_label.setTextScale(0.1)
         self.hp_label.setText("HEALTH:")
         hp_label_np = aspect2d.attach_new_node(self.hp_label)
         hp_label_np.set_pos((-1.4,0.,-.7))
-        
+        # health HUD value output
         self.health_label_v = TextNode("0")
         self.health_label_v.setTextColor(.6,1.,.6,1.)
         self.health_label_v.setTextScale(0.1)
@@ -482,52 +472,58 @@ class GameBase(ShowBase):
         self.accept("r", self.p1.make_ball, [BallType.FRNA])        # make an frna ball from energy
         self.accept("f", self.p1.make_ball, [BallType.FOOD])        # make an frna ball from energy
         self.accept("space", self.p1.consume_ball)                  # consume a ball
-
         self.accept("escape", self.userExit)                        # quickly quit the game
 
         self.cam.setPos(CAM_POS)                                    # spawn camera distance from origin
         self.cam.setHpr(0,-18,0)                                    # look down at your blob! 
 
-        self.taskMgr.add(self.update, "update")
-        # TODO spacial partitioning 
+        self.taskMgr.add(self.update, "update")                     # global game update
 
-    # camera follows p1
     def update(self, task):
-        self.cam.setPos(self.p1.pos() + CAM_POS)
+        self.cam.setPos(self.p1.pos() + CAM_POS)                    # camera follows p1
         # print(f"blobpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
-
-        # update UI
-        self.p1_label_v.setText(str(self.p1.num_balls))
-        self.p2_label_v.setText(str(self.p2.num_balls))
+        self.p1_label_v.setText(str(self.p1.num_balls))             # update UI
+        #self.p2_label_v.setText(str(self.p2.num_balls))
         self.energy_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
         self.health_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
         return task.cont
 
-    def game_over(self):
+    def game_over(self, msg: str = None):
         # TODO show game over screen
         print("\t\t=== GAME OVER ===")
-        print(" You ran out of energy! ")
-        self.userExit()
+        if msg is not None:
+            print(msg)
+        self.userExit()                                             # exit the game
 
-    def __del__(self):
+    def __del__(self):                                              # ShowBase deconstructor
         print("="*20 + " See you soon!:) " + 20*"=")
 
 if __name__ == "__main__":
     print("="*20 + " Welcome to microworld! v0.0.1 " + 20*"=")
     base = GameBase()                                               # Showbase initialised
 
-    hp_ball_pos_1 = Vec3(-10,5,0)
+    hp_ball_pos_1 = Vec3(-10,5,0)                                   # spawn some items
     hp_ball_pos_2 = Vec3(8,20,0)
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_1))
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_2))
-    salt_ball_pos_1 = Vec3(20,10,0)
+    salt_ball_pos_1 = Vec3(-20,10,0)
+    salt_ball_pos_2 = Vec3(-7,34,0)
+    salt_ball_pos_3 = Vec3(12,-5,0)
     base.floating_items.append(Ball(BallType.SALT, f"ball-{len(base.floating_items)}", pos=salt_ball_pos_1))
+    base.floating_items.append(Ball(BallType.SALT, f"ball-{len(base.floating_items)}", pos=salt_ball_pos_2))
+    base.floating_items.append(Ball(BallType.SALT, f"ball-{len(base.floating_items)}", pos=salt_ball_pos_3))
     mana_ball_pos_1 = Vec3(4,4,0)
     mana_ball_pos_2 = Vec3(0,20,0)
+    mana_ball_pos_3 = Vec3(-6,42,0)
+    mana_ball_pos_4 = Vec3(34,11,0)
     mana_ball_sfx = base.sfx.add_brrp(2200)
     base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
                                     pos=mana_ball_pos_1, sfx=mana_ball_sfx))
     base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
                                     pos=mana_ball_pos_2, sfx=mana_ball_sfx))
+    base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
+                                    pos=mana_ball_pos_3, sfx=mana_ball_sfx))
+    base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
+                                    pos=mana_ball_pos_4, sfx=mana_ball_sfx))
 
     base.run()                                                      # taskMgr blocks
