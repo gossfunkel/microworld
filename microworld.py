@@ -420,37 +420,44 @@ class GameBase(ShowBase):
 
         self.p1 = Blob("p1",Vec2(-5., 0.),Vec4(0.,0.,1.,1.), 200)    # create player 1's blob
         self.p2 = Blob("p2",Vec2(0., 50.),Vec4(0.,1.,0.,1.), 300)    # create a second blob
-
-        self.p1_label = TextNode("p1 balls: ")
-        self.p1_label.setTextColor(1,1,1,1)
-        self.p1_label.setTextScale(0.1)
-        p1_label_np = aspect2d.attach_new_node(self.p1_label)
-        p1_label_np.set_pos((.8,0.,.6))
         self.p1_label_v = TextNode("0")
         self.p1_label_v.setTextColor(1,1,1,1)
         self.p1_label_v.setTextScale(0.1)
         p1_label_v_np = aspect2d.attach_new_node(self.p1_label_v)
         p1_label_v_np.set_pos((1.3,0.,.85))
-        # self.p1_label.set_transparency(1)
-        self.p2_label = TextNode("p2 balls: ")
-        self.p2_label.setTextColor(1,1,1,1)
-        self.p2_label.setTextScale(0.1)
-        p2_label_np = aspect2d.attach_new_node(self.p2_label)
-        p2_label_np.set_pos((-.8,0.,.2))
+        
         self.p2_label_v = TextNode("0")
         self.p2_label_v.setTextColor(1,1,1,1)
         self.p2_label_v.setTextScale(0.1)
         p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
         p2_label_v_np.set_pos((1.3,0.,.7))
-        # self.p2_label.set_transparency(1)
+        
+        self.nrg_label = TextNode("nrg_label")
+        self.nrg_label.setTextColor(.5,.5,1,1)
+        self.nrg_label.setTextScale(0.1)
+        self.nrg_label.setText("ENERGY:")
+        nrg_label_np = aspect2d.attach_new_node(self.nrg_label)
+        nrg_label_np.set_pos((-1.4,0.,-.85))
 
         self.energy_label_v = TextNode("0")
         self.energy_label_v.setTextColor(.6,.6,1.,1.)
         self.energy_label_v.setTextScale(0.1)
         energy_label_v_np = aspect2d.attach_new_node(self.energy_label_v)
-        energy_label_v_np.set_pos((-1.3,0.,.85))
-        
+        energy_label_v_np.set_pos((-.98,0.,-.85))
 
+        self.hp_label = TextNode("hp_label")
+        self.hp_label.setTextColor(.5,1,.5,1)
+        self.hp_label.setTextScale(0.1)
+        self.hp_label.setText("HEALTH:")
+        hp_label_np = aspect2d.attach_new_node(self.hp_label)
+        hp_label_np.set_pos((-1.4,0.,-.7))
+        
+        self.health_label_v = TextNode("0")
+        self.health_label_v.setTextColor(.6,1.,.6,1.)
+        self.health_label_v.setTextScale(0.1)
+        health_label_v_np = aspect2d.attach_new_node(self.health_label_v)
+        health_label_v_np.set_pos((-.98,0.,-.7))
+        
         # TODO: Nodepath or spacial partitioning
         self.floating_items = []                                    # big list of all nearby collectable items
 
@@ -492,7 +499,8 @@ class GameBase(ShowBase):
         # update UI
         self.p1_label_v.setText(str(self.p1.num_balls))
         self.p2_label_v.setText(str(self.p2.num_balls))
-        self.energy_label_v.setText(str(self.p1.nrg)[:4])
+        self.energy_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
+        self.health_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
         return task.cont
 
     def game_over(self):
