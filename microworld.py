@@ -38,14 +38,16 @@ BASIS_VECS = np.array([0.,     0.,
                        -.5,    .866,
                        -.866,  .5,
                        -1.,    0.], dtype='f')
-CAM_POS: Vec3 = Vec3(0,-8,4)       # for keeping the camera a constant vector from the player blob
+
+# TODO update camera position when player blob gets significantly bigger
+CAM_POS: Vec3 = Vec3(0,-8,3)        # for keeping the camera a constant vector from the player blob
 
 class BallType(Enum):
-    MANA = "teal.png"       # energy sources - electron transfer agents
-    FOOD = "gold.png"       # energy sources - catabolic substrate
-    HEAL = "green.png"      # nutrition - phospholipids
-    FRNA = "purple.png"     # nutrition - nucleotides
-    SALT = "white65.png"    # salts
+    MANA = "teal.png"               # energy sources - electron transfer agents = restore energy
+    FOOD = "gold.png"               # energy sources - catabolic substrate      = grow cell
+    HEAL = "green.png"              # nutrition - phospholipids                 = heal damage
+    FRNA = "purple.png"             # nutrition - nucleotides                   = power up cell
+    SALT = "white65.png"            # salts                                     = slows energy loss
 
 CONFIG: str = """
 gl-version 4 3
@@ -91,7 +93,7 @@ class SoundFX:
 
     def add_brrp(self, length=3200) -> int:
         freq_scale: float = length / 48000                                      # translate length into seconds
-        atk: np.array = np.linspace(0,1,1800, dtype=np.float32)                 # ascending attack
+        atk: np.array = np.linspace(0,1,2000, dtype=np.float32)                 # ascending attack
         dec: np.array = np.linspace(1,0,length - len(atk), dtype=np.float32)    # descending decay
         env: np.array = np.append(atk, dec)                                     # generate a simple AD envelope
         amp: float    = .2
@@ -416,8 +418,8 @@ class GameBase(ShowBase):
         # big_light_np.setHpr(20, -80, 0)
         # render.setLight(big_light_np)                             # set a warm directional light on the whole scene
 
-        self.p1 = Blob("p1",Vec2(0.,-5.),Vec4(0.,0.,1.,1.), 200)    # create a test blob
-        self.p2 = Blob("p2",Vec2(0., 5.),Vec4(0.,1.,0.,1.), 300)    # create a second test blob
+        self.p1 = Blob("p1",Vec2(-5., 0.),Vec4(0.,0.,1.,1.), 200)    # create player 1's blob
+        self.p2 = Blob("p2",Vec2(0., 50.),Vec4(0.,1.,0.,1.), 300)    # create a second blob
 
         self.p1_label = TextNode("p1 balls: ")
         self.p1_label.setTextColor(1,1,1,1)
@@ -434,7 +436,7 @@ class GameBase(ShowBase):
         self.p2_label.setTextColor(1,1,1,1)
         self.p2_label.setTextScale(0.1)
         p2_label_np = aspect2d.attach_new_node(self.p2_label)
-        p2_label_np.set_pos((.8,0.,.6))
+        p2_label_np.set_pos((-.8,0.,.2))
         self.p2_label_v = TextNode("0")
         self.p2_label_v.setTextColor(1,1,1,1)
         self.p2_label_v.setTextScale(0.1)
@@ -477,7 +479,7 @@ class GameBase(ShowBase):
         self.accept("escape", self.userExit)                        # quickly quit the game
 
         self.cam.setPos(CAM_POS)                                    # spawn camera distance from origin
-        self.cam.setHpr(0,-22,0)                                    # look down at your blob! 
+        self.cam.setHpr(0,-18,0)                                    # look down at your blob! 
 
         self.taskMgr.add(self.update, "update")
         # TODO spacial partitioning 
@@ -506,15 +508,15 @@ if __name__ == "__main__":
     print("="*20 + " Welcome to microworld! v0.0.1 " + 20*"=")
     base = GameBase()                                               # Showbase initialised
 
-    hp_ball_pos_1 = Vec3(-4,0,0)
-    hp_ball_pos_2 = Vec3(3,-2,0)
+    hp_ball_pos_1 = Vec3(-10,5,0)
+    hp_ball_pos_2 = Vec3(8,20,0)
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_1))
     base.floating_items.append(Ball(BallType.HEAL, f"ball-{len(base.floating_items)}", pos=hp_ball_pos_2))
-    salt_ball_pos_1 = Vec3(-2,3,0)
+    salt_ball_pos_1 = Vec3(20,10,0)
     base.floating_items.append(Ball(BallType.SALT, f"ball-{len(base.floating_items)}", pos=salt_ball_pos_1))
     mana_ball_pos_1 = Vec3(4,4,0)
-    mana_ball_pos_2 = Vec3(0,-2,0)
-    mana_ball_sfx = base.sfx.add_brrp(2100)
+    mana_ball_pos_2 = Vec3(0,20,0)
+    mana_ball_sfx = base.sfx.add_brrp(2200)
     base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 
                                     pos=mana_ball_pos_1, sfx=mana_ball_sfx))
     base.floating_items.append(Ball(BallType.MANA, f"ball-{len(base.floating_items)}", 

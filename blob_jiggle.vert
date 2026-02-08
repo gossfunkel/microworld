@@ -122,15 +122,15 @@ void main() {
         //vec2 model_speed = vtx_data[0].vel;
 
         // calculate vertex position relative to centrepoint after movement
-        //vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
 
         // calculate where potential minimum is for vertex based on relative displacement of centrepoint over dt
         // desire position = relative-centrepoint-pos + basis-vector-to-centrepoint * radius
         vec2 desire_vtx = p3d_data[vtx].basis * radius;
-        /*
+        
         // calculate new position and vel in 2D model-space
         vec4 sho_out = SHO(vtx_mod, 
-                      vtx_data[vtx].vel, 
+                      p3d_data[vtx].vel, 
                       desire_vtx, 
                       osg_DeltaFrameTime,
                       10.);
@@ -141,8 +141,8 @@ void main() {
         p3d_data[vtx].pos = new_pos;
 
         // write output to buffers (FIXME relativity??)
-        vtx_data[vtx].vel = sho_out.zw;
-        */ new_pos = vec4(desire_vtx,0.,1.);
+        p3d_data[vtx].vel = sho_out.zw;
+        // new_pos = vec4(desire_vtx,0.,1.);
         //p3d_data[vtx].pos = inverse(p3d_ModelMatrix) * new_pos;
     } 
     
