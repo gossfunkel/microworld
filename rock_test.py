@@ -7,55 +7,89 @@ from panda3d.core import (
 import numpy as np
 import struct
 
-TAU         = np.pi * 2.
-CONFIG: str = """
+TAU             = np.pi * 2.
+ROCK_VTX_FORMAT = GeomVertexFormat.getV3c4()
+CONFIG: str     = """
 framebuffer-srgb true
 """
 loadPrcFileData("", CONFIG)
 
+class Rock:
+    def __init__(self, verts: int = 8, 
+                       pos: tuple[float] = (0.,0.,0.), 
+                       col: tuple[float]=(.05,.03,.04,.72)):
+        verts_3d = verts // 4
+        self.verts = verts + verts_3d                               # number of vertices in geom
+
+        # TODO define area at initialisation and conform random vertex positions to limited area
+
+        # make VBO
+        vtx_data   = GeomVertexData('rock_vbo', ROCK_VTX_FORMAT, Geom.UHStatic)
+        vtx_data.set_num_rows(self.verts)
+
+        # create a mesh ('Geom') from the vertices
+        geom = Geom(vtx_data)
+
+        # fill VBO with initial data and create geometry primitives
+        vtx_writer = GeomVertexWriter(vtx_data, "vertex")
+        col_writer = GeomVertexWriter(vtx_data, "color")
+        for point in range(verts):
+            random_radius = np.random.uniform(.6,1.4)
+            vtx_writer.add_data3(np.cos(TAU*point/self.verts)*random_radius,
+                                 np.sin(TAU*point/self.verts)*random_radius, 
+                                 0.)
+            col_writer.add_data4(col)                               # TODO add some colour variation
+
+        prim = GeomTrifans(Geom.UHStatic)
+        prim.add_consecutive_vertices(0,verts)                      # add the flat verts
+        prim.add_vertex(1)                                          # close the flat shape
+        prim.closePrimitive()
+        geom.addPrimitive(prim)
+
+        # build the 3D geometry TODO this only works for certain numbers of input verts
+        prim_up   = GeomTrifans(Geom.UHStatic)
+        prim_down = GeomTrifans(Geom.UHStatic)
+        for point in range(verts_3d):
+            updown = 2.*(point%2)                                   # half above, half below
+            vtx_writer.add_data3(np.random.uniform(-.3,.3),
+                                 np.random.uniform(-.3,.3),
+                                 (1 - updown)/2.)
+            col_writer.add_data4(col[0],col[1],col[2], col[3]*.5)                 # reduce opacity of 3d verts
+            if updown > 0:                                          # TODO use a pointer to do this
+                prim_up.add_vertex(point+verts-1)
+                for circle_pt in range(verts):
+                    prim_up.add_vertex(circle_pt+1)
+                prim_up.add_vertex(1)
+            else:
+                prim_down.add_vertex(point+verts-1)
+                for circle_pt in range(verts):
+                    prim_down.add_vertex(circle_pt+1)
+                prim_down.add_vertex(1)
+        prim_up.closePrimitive()
+        prim_down.closePrimitive()
+        geom.addPrimitive(prim_up)
+        geom.addPrimitive(prim_down)
+        
+        geom.set_bounds(BoundingBox((-1, -1, -1.5), (1, 1, 1.5)))     # set up a bounding volume to prevent culling
+        geom.doublesideInPlace()
+        geom_node = GeomNode('rock-geom_node')
+        geom_node.addGeom(geom)
+
+        root = ModelRoot("Rock_model_root")                         # Ensure mesh has a root for saving
+        root.addChild(geom_node)
+        
+        self.nodepath = NodePath(root)                              # create a new nodepath for the model
+        
+        self.nodepath.setDepthOffset(1)                             # give the node a depth offset to prevent self-shadowing etc
+        self.nodepath.set_transparency(1)                           # enable transparency
+        self.nodepath.reparent_to(base.render)
+        self.nodepath.set_pos(pos)
+
 if __name__ == '__main__':
     ShowBase()
-    #base.disableMouse() 
+    base.disableMouse() 
 
-    rock_verts: int = 8 # number of vertices in geom
-
-    # set up vertex format and make VBO
-    vtx_format = GeomVertexFormat.getV3c4()
-    vtx_data   = GeomVertexData('rock_vbo', vtx_format, Geom.UHStatic)
-    vtx_data.set_num_rows(rock_verts)
-
-    # fill VBO with initial data and create geometry primitives
-    vtx_writer = GeomVertexWriter(vtx_data, "vertex")
-    col_writer = GeomVertexWriter(vtx_data, "color")
-    for point in range(rock_verts):
-        random_radius = np.random.uniform(.6,1.4)
-        vtx_writer.add_data3(np.cos(TAU*point/rock_verts)*random_radius,
-                             np.sin(TAU*point/rock_verts)*random_radius, 
-                             0.)
-        col_writer.add_data4(.07,.04,.06,.6)
-
-    # finally, create a mesh ('Geom') from the vertices
-    geom = Geom(vtx_data)
-    prim = GeomTrifans(Geom.UHStatic)
-    prim.add_consecutive_vertices(0,rock_verts) # add all the verts
-    prim.add_vertex(1) # close the circle
-    prim.closePrimitive()
-    geom.addPrimitive(prim)
-    # set up a bounding volume to prevent culling
-    geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))
-    geom.doublesideInPlace()
-    geom_node = GeomNode('rock-geom_node')
-    geom_node.addGeom(geom)
-
-    # Ensure mesh has a root
-    root = ModelRoot("Rock_model_root")
-    root.addChild(geom_node)
-    # create a new nodepath for the model
-    nodepath = NodePath(root)
-    # give the blob a depth offset to prevent self-shadowing etc
-    nodepath.setDepthOffset(1)
-    nodepath.reparent_to(base.render)
-    nodepath.set_pos(0.,0.,0.)
+    test_rock = Rock()
 
     base.cam.set_pos(0.,-5.,2.)
     base.cam.set_hpr(0.,-25.,0.)
