@@ -2,10 +2,8 @@ from direct.showbase.ShowBase import ShowBase
 #from direct.filter.CommonFilters import CommonFilters
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
-    loadPrcFileData, Vec2, Vec3, Vec4,
-    GeomTrifans, GeomVertexFormat, GeomVertexArrayFormat, InternalName, GeomEnums,
-    GeomVertexData, Geom, GeomNode, DirectionalLight, UserDataAudio, AntialiasAttrib,
-    TextureStage, Texture, TextNode, Thread, Shader, ShaderBuffer, BamFile
+    loadPrcFileData, Vec2, Vec3, Vec4, DirectionalLight, UserDataAudio, 
+    TextureStage, Texture, TextNode, CardMaker
 )
 import numpy as np
 from scipy.signal import chirp
@@ -122,8 +120,15 @@ class GameBase(ShowBase):
         # self.p2_label_v.setTextScale(0.1)
         # p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
         # p2_label_v_np.set_pos((1.3,0.,.7))
-        
+
+        bar_maker = CardMaker("bars")
+        bar_maker.set_frame(0.,1.,0.,.1,)
+
         # energy HUD
+        self.nrg_bar = aspect2d.attach_new_node(bar_maker.generate())
+        self.nrg_bar.set_pos((-1.4,0.,-.86))
+        self.nrg_bar.set_texture(loader.loadTexture(mol.MOLTYPE.MANA.value))
+        
         self.nrg_label = TextNode("nrg_label")
         self.nrg_label.setTextColor(.5,.5,1,1)
         self.nrg_label.setTextScale(0.1)
@@ -138,6 +143,10 @@ class GameBase(ShowBase):
         energy_label_v_np.set_pos((-.98,0.,-.85))
 
         # health HUD
+        self.hp_bar = aspect2d.attach_new_node(bar_maker.generate())
+        self.hp_bar.set_pos((-1.4,0.,-.71))
+        self.hp_bar.set_texture(loader.loadTexture(mol.MOLTYPE.HEAL.value))
+
         self.hp_label = TextNode("hp_label")
         self.hp_label.setTextColor(.5,1,.5,1)
         self.hp_label.setTextScale(0.1)
@@ -189,6 +198,8 @@ class GameBase(ShowBase):
         #self.p2_label_v.setText(str(self.p2.num_mols))
         self.energy_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
         self.health_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
+        self.nrg_bar.set_scale(self.p1.nrg/self.p1.max_nrg,1.,1.)
+        self.hp_bar.set_scale(self.p1.hp/self.p1.max_hp,1.,1.)
         return task.cont
 
     def game_over(self, msg: str = None):
