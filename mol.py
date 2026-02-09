@@ -123,7 +123,7 @@ class Cell:
         print(f"Loading {self.name} VBO data...")
         # load the default Cell from file
         loaded_file = BamFile()
-        loaded_file.open_read("Cell_default.bam")
+        loaded_file.open_read("cell_default.bam")
         node = loaded_file.read_node()
         loaded_file.close()
 

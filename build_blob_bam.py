@@ -45,7 +45,7 @@ arrayFormat.add_column(InternalName.get_vertex().get_parent().append("velocity")
 arrayFormat.pack_columns()
 vtx_format.add_array(arrayFormat)
 vtx_format  = GeomVertexFormat.register_format(vtx_format)
-vtx_data    = GeomVertexData('blob_verts', vtx_format, Geom.UHStatic)
+vtx_data    = GeomVertexData('cell_verts', vtx_format, Geom.UHStatic)
 vtx_data.unclean_set_num_rows(13) # 1 row per vertex (12 rim, 1 centre)
 
 print("-- Formats registered. Creating geometry...")
@@ -57,10 +57,11 @@ view   = memoryview(vtx_data.modify_array(0)).cast('B')
 vals = bytearray()
 for i in range(13):
     # populate the bytearray with each row
-    vals.extend(struct.pack('4f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1], 0., 1.))
-    vals.extend(struct.pack('4f', 0.,0.,1.,0.))
+    zcoord = 1. if i == 0 else 0.                                   # quick and dirty raised middle
+    vals.extend(struct.pack('4f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1], zcoord, 1.))
+    vals.extend(struct.pack('4f', BASIS_VECS[i*2]/2.,BASIS_VECS[i*2 + 1]/2., 1., 0.))
     vals.extend(struct.pack('4f', 1., 1., 1., 1.))
-    vals.extend(struct.pack('2f', BASIS_VECS[i*2], BASIS_VECS[i*2 + 1]))
+    vals.extend(struct.pack('2f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1]))
     vals.extend(struct.pack('2f', 0., 0.))
 
 # write to VBO
@@ -69,29 +70,29 @@ view[:] = vals
 # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
 geom     = Geom(vtx_data)
 blobPrim = GeomTrifans(Geom.UHStatic)
-blobPrim.add_consecutive_vertices(0,12) # add all the verts
+blobPrim.add_consecutive_vertices(0,13) # add all the verts
 blobPrim.add_vertex(1) # close the circle
 blobPrim.closePrimitive()
 geom.addPrimitive(blobPrim)
 # set up a bounding volume to prevent culling
 geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))
 geom.doublesideInPlace()
-geom_node = GeomNode('blob-geom_node')
+geom_node = GeomNode('cell-geom_node')
 geom_node.addGeom(geom)
 
 print("-- Mesh made. Creating NodePath...")
 
 # Ensure mesh has a root
-root = ModelRoot("Blob_model_root")
+root = ModelRoot("Cell_model_root")
 root.addChild(geom_node)
 # create a new nodepath for the model
 nodepath = NodePath(root)
 # give the blob a depth offset to prevent self-shadowing etc
 nodepath.setDepthOffset(1)
 
-print("-- NodePath made. Writing to file 'blob_default.bam'")
+print("-- NodePath made. Writing to file 'cell_default.bam'")
 
-if nodepath.write_bam_file("blob_default.bam"):
+if nodepath.write_bam_file("cell_default.bam"):
     print("File written successfully!")
 else: 
     print("Writing to bam file failed.")
