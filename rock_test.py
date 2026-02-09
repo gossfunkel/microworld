@@ -35,8 +35,8 @@ class Rock:
         col_writer = GeomVertexWriter(vtx_data, "color")
         for point in range(verts):
             random_radius = np.random.uniform(.6,1.4)
-            vtx_writer.add_data3(np.cos(TAU*point/self.verts)*random_radius,
-                                 np.sin(TAU*point/self.verts)*random_radius, 
+            vtx_writer.add_data3(np.cos(TAU*point/verts)*random_radius,
+                                 np.sin(TAU*point/verts)*random_radius, 
                                  0.)
             col_writer.add_data4(col)                               # TODO add some colour variation
 
@@ -47,27 +47,27 @@ class Rock:
         geom.addPrimitive(prim)
 
         # build the 3D geometry TODO this only works for certain numbers of input verts
-        prim_up   = GeomTrifans(Geom.UHStatic)
-        prim_down = GeomTrifans(Geom.UHStatic)
         for point in range(verts_3d):
             updown = 2.*(point%2)                                   # half above, half below
             vtx_writer.add_data3(np.random.uniform(-.3,.3),
                                  np.random.uniform(-.3,.3),
-                                 (1 - updown)/2.)
-            col_writer.add_data4(col[0],col[1],col[2], col[3]*.5)                 # reduce opacity of 3d verts
-            if updown > 0:                                          # TODO use a pointer to do this
-                prim_up.add_vertex(point+verts-1)
-                for circle_pt in range(verts):
-                    prim_up.add_vertex(circle_pt+1)
-                prim_up.add_vertex(1)
-            else:
-                prim_down.add_vertex(point+verts-1)
-                for circle_pt in range(verts):
-                    prim_down.add_vertex(circle_pt+1)
-                prim_down.add_vertex(1)
+                                 (1. - updown)/2.)
+            col_writer.add_data4(col[0],col[1],col[2], col[3]*.5)   # reduce opacity of 3d verts
+        
+        prim_up   = GeomTrifans(Geom.UHStatic)
+        prim_up.add_vertex(verts)
+        prim_up.add_consecutive_vertices(1,verts)
+        prim_up.add_vertex(1)
+        #prim_up.add_vertex(1)
         prim_up.closePrimitive()
-        prim_down.closePrimitive()
         geom.addPrimitive(prim_up)
+        
+        prim_down = GeomTrifans(Geom.UHStatic)
+        prim_down.add_vertex(verts+1)
+        prim_down.add_consecutive_vertices(1,verts)
+        prim_down.add_vertex(1)
+        #prim_down.add_vertex(1)
+        prim_down.closePrimitive()
         geom.addPrimitive(prim_down)
         
         geom.set_bounds(BoundingBox((-1, -1, -1.5), (1, 1, 1.5)))     # set up a bounding volume to prevent culling
@@ -85,11 +85,18 @@ class Rock:
         self.nodepath.reparent_to(base.render)
         self.nodepath.set_pos(pos)
 
+def update(task):
+    base.cam.set_pos(np.sin(task.frame/100)*5,-np.cos(task.frame/100)*5,2.)
+    base.cam.look_at(base.test_rock.nodepath)
+    return task.cont
+
 if __name__ == '__main__':
     ShowBase()
     base.disableMouse() 
 
-    test_rock = Rock()
+    base.test_rock = Rock()
+
+    base.taskMgr.add(update, "update-cam")
 
     base.cam.set_pos(0.,-5.,2.)
     base.cam.set_hpr(0.,-25.,0.)
