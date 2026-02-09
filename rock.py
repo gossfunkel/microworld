@@ -9,17 +9,15 @@ import struct
 
 TAU             = np.pi * 2.
 ROCK_VTX_FORMAT = GeomVertexFormat.getV3c4()
-CONFIG: str     = """
-framebuffer-srgb true
-"""
-loadPrcFileData("", CONFIG)
 
 class Rock:
     def __init__(self, verts: int = 8, 
-                       pos: tuple[float] = (0.,0.,0.), 
-                       col: tuple[float]=(.05,.03,.04,.72)):
+                       pos: tuple[float] = (0.,0.,0.),
+                       radius: float = 1., 
+                       col: tuple[float]=(.045,.025,.03,.6)):
         verts_3d = verts // 4
-        self.verts = verts + verts_3d                               # number of vertices in geom
+        self.verts = verts + verts_3d + 1                           # number of vertices in geom
+        self.radius = radius
 
         # TODO define area at initialisation and conform random vertex positions to limited area
 
@@ -33,15 +31,18 @@ class Rock:
         # fill VBO with initial data and create geometry primitives
         vtx_writer = GeomVertexWriter(vtx_data, "vertex")
         col_writer = GeomVertexWriter(vtx_data, "color")
+        vtx_writer.add_data3(0.,0.,0.)
+        col_writer.add_data4(col)
         for point in range(verts):
             random_radius = np.random.uniform(.6,1.4)
+            rad = random_radius + self.radius
             vtx_writer.add_data3(np.cos(TAU*point/verts)*random_radius,
                                  np.sin(TAU*point/verts)*random_radius, 
                                  0.)
             col_writer.add_data4(col)                               # TODO add some colour variation
 
         prim = GeomTrifans(Geom.UHStatic)
-        prim.add_consecutive_vertices(0,verts)                      # add the flat verts
+        prim.add_consecutive_vertices(0,verts+1)                      # add the flat verts
         prim.add_vertex(1)                                          # close the flat shape
         prim.closePrimitive()
         geom.addPrimitive(prim)
@@ -55,7 +56,7 @@ class Rock:
             col_writer.add_data4(col[0],col[1],col[2], col[3]*.5)   # reduce opacity of 3d verts
         
         prim_up   = GeomTrifans(Geom.UHStatic)
-        prim_up.add_vertex(verts)
+        prim_up.add_vertex(verts+1)
         prim_up.add_consecutive_vertices(1,verts)
         prim_up.add_vertex(1)
         #prim_up.add_vertex(1)
@@ -63,7 +64,7 @@ class Rock:
         geom.addPrimitive(prim_up)
         
         prim_down = GeomTrifans(Geom.UHStatic)
-        prim_down.add_vertex(verts+1)
+        prim_down.add_vertex(verts+2)
         prim_down.add_consecutive_vertices(1,verts)
         prim_down.add_vertex(1)
         #prim_down.add_vertex(1)
@@ -80,7 +81,7 @@ class Rock:
         
         self.nodepath = NodePath(root)                              # create a new nodepath for the model
         
-        self.nodepath.setDepthOffset(1)                             # give the node a depth offset to prevent self-shadowing etc
+        #self.nodepath.setDepthOffset(1)                             # give the node a depth offset to prevent self-shadowing etc
         self.nodepath.set_transparency(1)                           # enable transparency
         self.nodepath.reparent_to(base.render)
         self.nodepath.set_pos(pos)
@@ -91,6 +92,11 @@ def update(task):
     return task.cont
 
 if __name__ == '__main__':
+    CONFIG: str     = """
+    framebuffer-srgb true
+    """
+    loadPrcFileData("", CONFIG)
+
     ShowBase()
     base.disableMouse() 
 
