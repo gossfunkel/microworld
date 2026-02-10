@@ -1,0 +1,29 @@
+#version 430
+
+// TESSELLATION CONTROL: define number of verts to make with tessellation
+// Tessellation-Shader-specific variables:
+//gl_PatchVerticesIn // verts per patch
+//gl_PrimitiveID     // current patch
+//gl_InvocationID    // current vertex within patch
+
+// uniform float lod_level;
+
+// SSBO for vertex pulling
+#pragma include cell.common
+layout (std430, binding = 0) buffer ssbo { 
+    P3d_data p3d_data[13];          //  = 64B x 13 
+};                                  // = 832B buffer
+
+layout (location = 0) in Vtx_data patchout[];
+layout(vertices = 3) out;
+layout(location = 1) out Vtx_data vtx_tesc[];
+
+//in vec2 texcoords_pch[];
+//out vec2 texcoords_vtx[];
+
+void main() {
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    //texcoords_pch[gl_InvocationID] = texcoords_vtx[gl_InvocationID];
+
+    gl_TessLevelOuter[0] = 
+}

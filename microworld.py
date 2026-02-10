@@ -3,11 +3,12 @@ from direct.showbase.ShowBase import ShowBase
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
     loadPrcFileData, Vec2, Vec3, Vec4, DirectionalLight, UserDataAudio, 
-    TextureStage, Texture, TextNode, CardMaker
+    TextureStage, Texture, TextNode, CardMaker, ColorBlendAttrib, TransparencyAttrib
 )
 import numpy as np
 from scipy.signal import chirp
 import struct
+import copy
 from rock import Rock
 import mol
 
@@ -39,6 +40,7 @@ framebuffer-srgb true
 """
 loadPrcFileData("", CONFIG)
 
+CHUNK_SIZE = 30.
 
 # container for sound effects
 class SoundFX:
@@ -92,12 +94,15 @@ class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
         self.set_background_color(0.12,0.05,0.22,1.)                # dark background
+        self.CHUNK_SIZE = CHUNK_SIZE
+        self.loaded_chunks = None
 
         #render.setAntialias(AntialiasAttrib.MAuto)                 # set global antialiasing
         #render.setShaderAuto()
 
         self.sfx = SoundFX()                                        # initialise sound effect library
         self.sfx.brrps.append(self.sfx.add_brrp(2800))              # initialise default mol brrp
+        self.setup_grid()
 
         # big_light_np = render.attachNewNode(DirectionalLight('the_big_light'))
         # big_light_np.node().setShadowCaster(True, 512, 512)
@@ -105,8 +110,11 @@ class GameBase(ShowBase):
         # big_light_np.setHpr(20, -80, 0)
         # render.setLight(big_light_np)                             # set a warm directional light on the whole scene
 
-        self.p1 = mol.Cell("p1",Vec2(0., 0.),Vec4(0.,0.,1.,1.), 200)    # create player 1's Cell
-        self.p2 = mol.Cell("p2",Vec2(0., 50.),Vec4(0.,1.,0.,1.), 300)   # create a second Cell
+        self.p1 = mol.Cell("p1",Vec2(0., 0.),Vec4(0.,0.,1.,1.), 200, (0,0))    # create player 1's Cell
+        self.p2 = mol.Cell("p2",Vec2(0., 25.),Vec4(0.,1.,0.,1.), 300, (0,0))   # create a second Cell
+        self.grid[0][0].append(self.p1)
+        self.grid[0][0].append(self.p2)
+        self.load_chunk((0,0))
 
         # mol counters
         self.p1_label_v = TextNode("0")
@@ -124,41 +132,55 @@ class GameBase(ShowBase):
         bar_maker = CardMaker("bars")
         bar_maker.set_frame(0.,1.,0.,.1,)
 
+        #    render   = incoming_col * A - framebuffer_col * B
+        bar_text_cba  = ColorBlendAttrib.make(ColorBlendAttrib.M_subtract, 
+                                              ColorBlendAttrib.O_one, 
+                                              ColorBlendAttrib.O_one)
+        bar_text_trat = TransparencyAttrib.make(TransparencyAttrib.M_binary)
+
         # energy HUD
         self.nrg_bar = aspect2d.attach_new_node(bar_maker.generate())
-        self.nrg_bar.set_pos((-1.4,0.,-.86))
+        self.nrg_bar.set_pos((-1.4,0.,-.9))
         self.nrg_bar.set_texture(loader.loadTexture(mol.MOLTYPE.MANA.value))
         
         self.nrg_label = TextNode("nrg_label")
-        self.nrg_label.setTextColor(.5,.5,1,1)
-        self.nrg_label.setTextScale(0.1)
+        self.nrg_label.set_attrib(bar_text_trat, 1000)
+        self.nrg_label.setTextColor(.5,1.,1.,.8)
+        self.nrg_label.setTextScale(0.078)
         self.nrg_label.setText("ENERGY:")
+        self.nrg_label.setAttrib(bar_text_cba)
         nrg_label_np = aspect2d.attach_new_node(self.nrg_label)
-        nrg_label_np.set_pos((-1.4,0.,-.85))
+        nrg_label_np.set_pos((-1.35,0.,-.872))
         # energy HUD value output
         self.energy_label_v = TextNode("0")
-        self.energy_label_v.setTextColor(.6,.6,1.,1.)
-        self.energy_label_v.setTextScale(0.1)
+        self.energy_label_v.set_attrib(bar_text_trat, 1000)
+        self.energy_label_v.setTextColor(.6,1.,1.,.8)
+        self.energy_label_v.setTextScale(0.08)
+        self.energy_label_v.setAttrib(bar_text_cba)
         energy_label_v_np = aspect2d.attach_new_node(self.energy_label_v)
-        energy_label_v_np.set_pos((-.98,0.,-.85))
+        energy_label_v_np.set_pos((-.97,0.,-.87))
 
         # health HUD
         self.hp_bar = aspect2d.attach_new_node(bar_maker.generate())
-        self.hp_bar.set_pos((-1.4,0.,-.71))
+        self.hp_bar.set_pos((-1.4,0.,-.75))
         self.hp_bar.set_texture(loader.loadTexture(mol.MOLTYPE.HEAL.value))
 
         self.hp_label = TextNode("hp_label")
-        self.hp_label.setTextColor(.5,1,.5,1)
-        self.hp_label.setTextScale(0.1)
+        self.hp_label.set_attrib(bar_text_trat, 1000)
+        self.hp_label.setTextColor(.5,1.,.5,.8)
+        self.hp_label.setTextScale(0.078)
         self.hp_label.setText("HEALTH:")
+        self.hp_label.setAttrib(bar_text_cba)
         hp_label_np = aspect2d.attach_new_node(self.hp_label)
-        hp_label_np.set_pos((-1.4,0.,-.7))
+        hp_label_np.set_pos((-1.35,0.,-.722))
         # health HUD value output
         self.health_label_v = TextNode("0")
-        self.health_label_v.setTextColor(.6,1.,.6,1.)
-        self.health_label_v.setTextScale(0.1)
+        self.health_label_v.set_attrib(bar_text_trat, 1000)
+        self.health_label_v.setTextColor(.6,1.,.6,.8)
+        self.health_label_v.setTextScale(0.08)
+        self.health_label_v.setAttrib(bar_text_cba)
         health_label_v_np = aspect2d.attach_new_node(self.health_label_v)
-        health_label_v_np.set_pos((-.98,0.,-.7))
+        health_label_v_np.set_pos((-.97,0.,-.72))
         
         # TODO: Nodepath or spacial partitioning
         self.floating_items = []                                    # big list of all nearby collectable items
@@ -191,6 +213,88 @@ class GameBase(ShowBase):
 
         self.taskMgr.add(self.update, "update")                     # global game update
 
+    def setup_grid(self):
+        # generate a 3x3 array of collider arrays
+        self.grid = np.array([[None] for _ in range(81)]) # u, v, contents
+        self.grid.resize((9,9))
+        for i in range(81):
+            self.grid[i%9,i//9] = self.load_level_random(((i%9)-1,(i//9)-1))
+        return self.grid
+
+    def get_chunk(self, uv: tuple[int]):
+        # calculate actual array indices for given uvs (i.e. -1,-1 = 0,0 for a 3x3 grid)
+        gridsize = self.grid.shape
+        return self.grid[uv[0]+gridsize[0]//2, uv[1]+gridsize[1]//2]
+
+    def get_loaded_chunks(self):
+        return self.loaded_chunks
+
+    def load_chunk(self, uv: tuple[int]):
+        if self.loaded_chunks == None:
+            self.loaded_chunks = self.get_chunk((uv[0],uv[1]))
+            #self.get_chunk((uv[0],uv[1])) = None
+        else:
+            for item in base.get_chunk((uv[0]+1,uv[1])):
+                self.loaded_chunks.append(item)
+            #self.get_chunk((uv[0],uv[1])) = None
+
+    # takes uv coords, not a base.grid index
+    def load_level_random(self, chunk_id: tuple[int]):
+        chunk = []
+
+        # position of the CENTRE of the chunk
+        gridpos = Vec3(chunk_id[0]*CHUNK_SIZE,chunk_id[1]*CHUNK_SIZE,0.)
+        for _ in range(np.random.randint(1,4)):
+            # spawn health mols
+            hp_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.HEAL, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=hp_mol_pos))
+        for _ in range(np.random.randint(1,6)):
+            # spawn salt mols
+            salt_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.SALT, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=salt_mol_pos))
+        mana_mol_sfx = base.sfx.add_brrp(2200)
+        for _ in range(np.random.randint(2,8)):
+            # spawn mana mols
+            mana_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=mana_mol_pos, sfx=mana_mol_sfx))
+        for _ in range(np.random.randint(0,1)):
+            # spawn protein mols
+            frna_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.FRNA, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=frna_mol_pos))
+        for _ in range(np.random.randint(0,2)):
+            # spawn carb mols
+            food_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.FOOD, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=food_mol_pos))
+        for _ in range(np.random.randint(1,4)):
+            # spawn some rocks
+            rock_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(Rock(8,rock_pos, np.random.uniform(1.,3.)))
+        return chunk
+    
+    def load_level(self, chunk: tuple[int]):
+        for item in floating_items:
+            chunk.append(item)
+        for rock in rocks:
+            chunk.append(rock)
+        return chunk
+
     def update(self, task):
         self.cam.setPos(self.p1.pos() + CAM_POS)                    # camera follows p1
         # print(f"Cellpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
@@ -213,33 +317,7 @@ class GameBase(ShowBase):
         print("="*20 + " See you soon!:) " + 20*"=")
 
 if __name__ == "__main__":
-    print("="*20 + " Welcome to microworld! v0.0.1 " + 20*"=")
+    print("="*20 + " Welcome to microworld! v0.0.2 " + 20*"=")
     base = GameBase()                                               # Showbase initialised
-
-    hp_mol_pos_1 = Vec3(-10,5,0)                                    # spawn some items
-    hp_mol_pos_2 = Vec3(8,20,0)
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.HEAL, f"mol-{len(base.floating_items)}", pos=hp_mol_pos_1))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.HEAL, f"mol-{len(base.floating_items)}", pos=hp_mol_pos_2))
-    salt_mol_pos_1 = Vec3(-20,10,0)
-    salt_mol_pos_2 = Vec3(-7,34,0)
-    salt_mol_pos_3 = Vec3(12,-5,0)
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.SALT, f"mol-{len(base.floating_items)}", pos=salt_mol_pos_1))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.SALT, f"mol-{len(base.floating_items)}", pos=salt_mol_pos_2))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.SALT, f"mol-{len(base.floating_items)}", pos=salt_mol_pos_3))
-    mana_mol_pos_1 = Vec3(4,4,0)
-    mana_mol_pos_2 = Vec3(0,20,0)
-    mana_mol_pos_3 = Vec3(-6,42,0)
-    mana_mol_pos_4 = Vec3(34,11,0)
-    mana_mol_sfx = base.sfx.add_brrp(2200)
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{len(base.floating_items)}", 
-                                    pos=mana_mol_pos_1, sfx=mana_mol_sfx))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{len(base.floating_items)}", 
-                                    pos=mana_mol_pos_2, sfx=mana_mol_sfx))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{len(base.floating_items)}", 
-                                    pos=mana_mol_pos_3, sfx=mana_mol_sfx))
-    base.floating_items.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{len(base.floating_items)}", 
-                                    pos=mana_mol_pos_4, sfx=mana_mol_sfx))
-
-    test_rock = Rock(8,(0.,5.,0.), 2.)
 
     base.run()                                                      # taskMgr blocks

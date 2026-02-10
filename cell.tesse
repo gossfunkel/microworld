@@ -1,0 +1,17 @@
+#version 430
+
+// TESSELATION EVALUATION: define position of new tessellated verts
+// Tessellation-Shader-specific variables:
+//gl_PatchVerticesIn // verts per patch
+//gl_PrimitiveID     // current patch
+//gl_TessCoord       // current vertex within patch
+
+void main() {
+    // specify triangle patches
+    // specify spacing
+
+    float u = gl_TessCoord.x;
+    float v = gl_TessCoord.y;
+
+    // do catmull-rom splinic interpolation
+}

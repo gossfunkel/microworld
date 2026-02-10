@@ -22,7 +22,7 @@ class MOLTYPE(Enum):
 
 # floating resource orbs. can bind to cells
 class Mol:
-    def __init__(self, type: MOLTYPE, name: str, pos: Vec3 | None = None, 
+    def __init__(self, type: MOLTYPE, name: str, uv: tuple[int], pos: Vec3 | None = None, 
                  cell = None, index: int | None = None, sfx = None):
         self.type  = type
         self.name  = name
@@ -33,6 +33,7 @@ class Mol:
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
         self.angle = 0
         self.orbiting = True if cell is not None else False
+        self.uv = uv
 
         model = base.loader.load_model("sphere.egg")
         #model.setTransparency(1)
@@ -102,10 +103,11 @@ class Mol:
 
 # a PC. cell-like blobby guy that blobs about
 class Cell:
-    def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float) -> None:
+    def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float, uv: tuple[int]) -> None:
         # TODO move data into C++ obj tags or VBO
         self.name            = name
         self.col: tuple      = col
+        self.uv              = uv            # coordinate in the grid
 
         self.radius: float   = 2.
         self.verts: int      = 12            # number of OUTER vertices (Cell requires centre)
@@ -178,11 +180,11 @@ class Cell:
                 match mol:
                     case MOLTYPE.FRNA:
                         self.mols.append(Mol(MOLTYPE.FRNA, self.name+"-FRNAmol-"+str(self.num_mols), 
-                                               cell=self, index=self.num_mols))
+                                               self.uv, cell=self, index=self.num_mols))
                         self.num_mols += 1
                     case MOLTYPE.FOOD:
                         self.mols.append(Mol(MOLTYPE.FOOD, self.name+"-FOODmol-"+str(self.num_mols), 
-                                               cell=self, index=self.num_mols))
+                                               self.uv, cell=self, index=self.num_mols))
                         self.num_mols += 1
         else:
             print("DANGER: Insufficient energy!")
@@ -234,17 +236,47 @@ class Cell:
         #vtx_view = memoryview(self.nodepath.node().get_vertex_data().modify_array(0)).cast('B').cast('f')
         #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
-        # tick energy loss
-        self.nrg -= self.nrg_loss_rate
+        self.nrg -= self.nrg_loss_rate                              # tick energy loss
 
-        if (self.nrg <= 0.) or (self.hp <= 0.):
-            self.die()
+        if (self.nrg <= 0.) or (self.hp <= 0.): self.die()          # check if cell should die
 
-        # naive collision check with items - TODO spacial hashing
-        for item in base.floating_items:
+        # update cell uv as it travels through the chunks
+        xneg = -1 if self.pos().x < 0 else 1
+        yneg = -1 if self.pos().y < 0 else 1
+        self.uv = (int((self.pos().x + xneg*base.CHUNK_SIZE//2)//base.CHUNK_SIZE), 
+                   int((self.pos().y + yneg*base.CHUNK_SIZE//2)//base.CHUNK_SIZE))
+        #print(f"{self.name} uv is {self.uv}")
+
+        # load chunks as cell approaches them
+        if (((self.pos().x+base.CHUNK_SIZE/2) < self.radius) & 
+            ((self.nodepath.get_pos().x+base.CHUNK_SIZE/2) > 0.)):
+            base.load_chunk((self.uv[0]+1,self.uv[1]))
+        elif (((self.pos().x-base.CHUNK_SIZE/2) > self.radius) & 
+            ((self.nodepath.get_pos().x-base.CHUNK_SIZE/2) < 0.)):
+            base.load_chunk(self.uv[0]-1,self.uv[1])
+        if (((self.pos().y+base.CHUNK_SIZE/2) < self.radius) & 
+            ((self.pos().y+base.CHUNK_SIZE/2) > 0.)):
+            base.load_chunk((self.uv[0],self.uv[1]+1))
+        elif (((self.nodepath.get_pos().y-base.CHUNK_SIZE/2) > self.radius) & 
+            ((self.pos().y-base.CHUNK_SIZE/2) < 0.)):
+            base.load_chunk((self.uv[0],self.uv[1]-1))
+
+        # collision detection - get items loaded from chunks
+        check_items = base.get_loaded_chunks()
+        # check all items in nearby chunks
+        for item in check_items:
+            #print(f"checking item: {item}")
             if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
-                self.add_mol(item)
-                base.floating_items.remove(item)
+                if isinstance(item, Mol):
+                    print(f"adding mol {item}")
+                    self.add_mol(item)
+                    base.get_chunk(item.uv).remove(item)
+                else:
+                    self.colliding = True
+                    # self.nodepath.setshaderinput("colliding", self.colliding)
+            else:
+                self.colliding = False
+                # self.nodepath.setshaderinput("colliding", self.colliding)
 
         self.nodepath.set_pos(self.pos() + Vec3(self.velocity, 0.))
         self.nodepath.set_shader_input("model_velocity", self.velocity)
@@ -276,7 +308,8 @@ class Cell:
             mol.orbiting = False
             mol.cell = None
             mol.index = None
-            base.floating_items.append(mol)
+            mol.uv = self.uv
+            base.get_chunk(self.uv).append(mol)
         # die
         taskMgr.remove(self.name+"-update")
         if self.name == "p1":
