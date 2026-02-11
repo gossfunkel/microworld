@@ -114,20 +114,14 @@ class GameBase(ShowBase):
         self.p2 = mol.Cell("p2",Vec2(0., 25.),Vec4(0.,1.,0.,1.), 300, (0,0))   # create a second Cell
         self.grid[0][0].append(self.p1)
         self.grid[0][0].append(self.p2)
-        self.chunks = self.get_chunk((0,0))  # FIXME this isn't working right
+        self.chunks = self.get_chunk((0,0))
 
-        # mol counters
+        # mol counter
         self.p1_label_v = TextNode("0")
         self.p1_label_v.setTextColor(1,1,1,1)
         self.p1_label_v.setTextScale(0.1)
         p1_label_v_np = aspect2d.attach_new_node(self.p1_label_v)
         p1_label_v_np.set_pos((1.3,0.,.85))
-        
-        # self.p2_label_v = TextNode("0")
-        # self.p2_label_v.setTextColor(1,1,1,1)
-        # self.p2_label_v.setTextScale(0.1)
-        # p2_label_v_np = aspect2d.attach_new_node(self.p2_label_v)
-        # p2_label_v_np.set_pos((1.3,0.,.7))
 
         bar_maker = CardMaker("bars")
         bar_maker.set_frame(0.,1.,0.,.1,)
@@ -152,13 +146,13 @@ class GameBase(ShowBase):
         nrg_label_np = aspect2d.attach_new_node(self.nrg_label)
         nrg_label_np.set_pos((-1.35,0.,-.872))
         # energy HUD value output
-        self.energy_label_v = TextNode("0")
-        self.energy_label_v.set_attrib(bar_text_trat, 1000)
-        self.energy_label_v.setTextColor(.6,1.,1.,.8)
-        self.energy_label_v.setTextScale(0.08)
-        self.energy_label_v.setAttrib(bar_text_cba)
-        energy_label_v_np = aspect2d.attach_new_node(self.energy_label_v)
-        energy_label_v_np.set_pos((-.97,0.,-.87))
+        self.nrg_label_v = TextNode("0")
+        self.nrg_label_v.set_attrib(bar_text_trat, 1000)
+        self.nrg_label_v.setTextColor(.6,1.,1.,.8)
+        self.nrg_label_v.setTextScale(0.08)
+        self.nrg_label_v.setAttrib(bar_text_cba)
+        nrg_label_v_np = aspect2d.attach_new_node(self.nrg_label_v)
+        nrg_label_v_np.set_pos((-.97,0.,-.87))
 
         # health HUD
         self.hp_bar = aspect2d.attach_new_node(bar_maker.generate())
@@ -174,16 +168,13 @@ class GameBase(ShowBase):
         hp_label_np = aspect2d.attach_new_node(self.hp_label)
         hp_label_np.set_pos((-1.35,0.,-.722))
         # health HUD value output
-        self.health_label_v = TextNode("0")
-        self.health_label_v.set_attrib(bar_text_trat, 1000)
-        self.health_label_v.setTextColor(.6,1.,.6,.8)
-        self.health_label_v.setTextScale(0.08)
-        self.health_label_v.setAttrib(bar_text_cba)
-        health_label_v_np = aspect2d.attach_new_node(self.health_label_v)
-        health_label_v_np.set_pos((-.97,0.,-.72))
-        
-        # TODO: Nodepath or spacial partitioning
-        self.floating_items = []                                    # big list of all nearby collectable items
+        self.hp_label_v = TextNode("0")
+        self.hp_label_v.set_attrib(bar_text_trat, 1000)
+        self.hp_label_v.setTextColor(.6,1.,.6,.8)
+        self.hp_label_v.setTextScale(0.08)
+        self.hp_label_v.setAttrib(bar_text_cba)
+        hp_label_v_np = aspect2d.attach_new_node(self.hp_label_v)
+        hp_label_v_np.set_pos((-.97,0.,-.72))
 
         # awsd/keypad movement for p1 Cell
         self.accept("arrow_left", self.p1.move, ["left"])
@@ -231,32 +222,34 @@ class GameBase(ShowBase):
     def get_chunks(self):
         return self.chunks
 
-    # get the list of which chunks are loaded
+    # get the list of which chunks have had their data cached for collisions
     def get_loaded_chunks(self):
         return self.loaded_chunks
 
-    # load data from chunk at uv into cache of chunk data
+    # load data from chunk at uv into collision cache 
     def load_chunk(self, uv: tuple[int]):
         for item in base.get_chunk((uv[0],uv[1])):
             self.chunks.append(item)
         self.loaded_chunks.append(uv)
         #self.get_chunk((uv[0],uv[1])) = None
 
-    # load data from multiple chunks at uvs in list into cache of chunk data
+    # load data from multiple chunks at uvs in list into collision cache 
     def load_chunks(self, uvs: list[tuple[int]]):
         for uv in uvs:
             for item in base.get_chunk((uv[0],uv[1])):
                 self.chunks.append(item)
-            self.loaded_chunks.append(uv)
+            self.loaded_chunks.append(uv)                           # take note of which chunks have been loaded
             #self.get_chunk((uv[0],uv[1])) = None
 
-    # check if any of a list of uvs of chunks is not loaded. returns uvs of chunks not loaded to cache of chunk data
+    # check if any of a list of uvs of chunks is not loaded. returns uvs of chunks not loaded to collision cache 
     def check_loaded_chunks(self, chunks: list[tuple[int]]) -> list[tuple[int]]:
         missing_chunks = []
         for chunk in chunks:
             if chunk not in self.loaded_chunks:
                 missing_chunks.append(chunk)
         return missing_chunks
+
+    # TODO something to keep track of which chunks are no longer nearby and can be unloaded from collision cache
 
     # takes uv coords, not a base.grid index
     def load_level_random(self, chunk_id: tuple[int]):
@@ -320,8 +313,8 @@ class GameBase(ShowBase):
         # print(f"Cellpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
         self.p1_label_v.setText(str(self.p1.num_mols))             # update UI
         #self.p2_label_v.setText(str(self.p2.num_mols))
-        self.energy_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
-        self.health_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
+        self.nrg_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
+        self.hp_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
         self.nrg_bar.set_scale(self.p1.nrg/self.p1.max_nrg,1.,1.)
         self.hp_bar.set_scale(self.p1.hp/self.p1.max_hp,1.,1.)
         return task.cont

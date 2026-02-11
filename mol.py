@@ -254,13 +254,13 @@ class Cell:
         if (((self.pos().x+base.CHUNK_SIZE/2)%base.CHUNK_SIZE < self.radius) & 
             ((self.pos().x+base.CHUNK_SIZE/2)%base.CHUNK_SIZE > 0.)):
             check_chunks.append((self.uv[0]+1,self.uv[1]))
-        elif (((self.pos().x-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > self.radius) & 
+        elif (((self.pos().x-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > -self.radius) & 
               ((self.pos().x-base.CHUNK_SIZE/2)%base.CHUNK_SIZE < 0.)):
             check_chunks.append((self.uv[0]-1,self.uv[1]))
         if (((self.pos().y+base.CHUNK_SIZE/2)%base.CHUNK_SIZE < self.radius) & 
             ((self.pos().y+base.CHUNK_SIZE/2)%base.CHUNK_SIZE > 0.)):
             check_chunks.append((self.uv[0],self.uv[1]+1))
-        elif (((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > self.radius) & 
+        elif (((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > -self.radius) & 
               ((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE < 0.)):
             check_chunks.append((self.uv[0],self.uv[1]-1))
 
