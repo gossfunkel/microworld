@@ -4,7 +4,7 @@ from panda3d.core import (
 import time
 import mol
 
-CAM_POS: Vec3 = Vec3(0,-8,3)                                        # initial camera position at game load
+CAM_POS: Vec3 = Vec3(0,-7,2)                                        # initial camera position at game load
 
 def zoom_in():
     current_fov = base.cam.node().getLens().get_fov()
@@ -22,24 +22,25 @@ def drag_cam():
 
 def release_cam():
     base.taskMgr.remove("drag_cam")
+    del base.last_mouse_pos
 
 def cam_drag_task(task):
     if base.mouseWatcherNode.hasMouse():
         x = base.mouseWatcherNode.getMouseX()                       # get mouse position
         y = base.mouseWatcherNode.getMouseY()
-        if hasattr(base, 'last_mouse_pos'):                             # if this has run at least once
+        if hasattr(base, 'last_mouse_pos'):                         # if this has run at least once
             dt = globalClock.get_dt()
             mouse_move = Vec3(float(x - base.last_mouse_pos[0]) * -1.5, float(y - base.last_mouse_pos[1]) * -1.5, 0.)
-            base.CAM_POS += mouse_move                                  # add change in mouse pos to cam pos
+            base.CAM_POS += mouse_move                              # add change in mouse pos to cam pos
         base.last_mouse_pos = (x,y)
     return task.cont
 
 # bind a cell to the player wasd input and initialise camera controls
 def bind_cell(cell):
-    base.disableMouse() 
-    base.CAM_POS = CAM_POS
+    base.disableMouse()                                             # switch off default controls
+    base.CAM_POS = CAM_POS                                          # initialise base.CAM_POS
 
-    # awsd/keypad movement for p1 Cell
+    # setup awsd/keypad movement for p1 Cell
     base.accept("arrow_left", cell.move, ["left"])
     base.accept("arrow_left-repeat", cell.move, ["left"])
     base.accept("a", cell.move, ["left"])
@@ -57,17 +58,20 @@ def bind_cell(cell):
     base.accept("s", cell.move, ["back"])
     base.accept("s-repeat", cell.move, ["back"])
 
+    # setup dragging to move camera
     base.accept("mouse1", drag_cam)
     base.accept("mouse1-up", release_cam)
 
+    # setup zoom with scrollwheel
     base.accept("wheel_up", zoom_in)
     base.accept("wheel_down", zoom_out)
     
+    # game control buttons
     base.accept("r", cell.make_mol, [mol.MOLTYPE.FRNA])             # make an frna mol from energy
     base.accept("f", cell.make_mol, [mol.MOLTYPE.FOOD])             # make an frna mol from energy
     base.accept("space", cell.consume_mol)                          # consume a mol
     base.accept("escape", base.userExit)                            # quickly quit the game
 
+    # initialise camera position and angle
     base.cam.setPos(base.CAM_POS)                                   # spawn camera distance from origin
-    base.cam.setHpr(0,-18,0)                                        # look down at your Cell! 
-
+    base.cam.setHpr(0,-19,0)                                        # look down at your Cell! 
