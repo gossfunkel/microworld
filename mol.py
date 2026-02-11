@@ -170,6 +170,7 @@ class Cell:
         return self.nodepath.get_pos()
 
     def grow(self):
+        # TODO zoom camera out when p1 Cell gets significantly bigger
         self.max_hp += 1.                                           # increase maximum health
         self.radius *= 1.1                                          # make the Cell bigger
         self.nrg_loss_rate += .001                                  # lose energy faster BALANCE

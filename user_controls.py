@@ -4,19 +4,37 @@ from panda3d.core import (
 import time
 import mol
 
-# TODO update camera position when player Cell gets significantly bigger
-CAM_POS: Vec3 = Vec3(0,-8,3)        # for keeping the camera a constant vector from the player Cell
+CAM_POS: Vec3 = Vec3(0,-8,3)                                        # initial camera position at game load
 
 def zoom_in():
     current_fov = base.cam.node().getLens().get_fov()
-    if (current_fov[0] > .1) & (current_fov[1] > .1):
-        base.cam.node().getLens().setFov(current_fov[0]*.9,current_fov[1]*.9)
+    if (current_fov[0] > 1) & (current_fov[1] > 1):
+        base.cam.node().getLens().setFov(current_fov[0]*.98,current_fov[1]*.98)
 
 def zoom_out():
     current_fov = base.cam.node().getLens().get_fov()
-    if (current_fov[0] < 180) & (current_fov[1] < 180):
-        base.cam.node().getLens().setFov(current_fov[0]*1.1,current_fov[1]*1.1)
+    if (current_fov[0] < 90) & (current_fov[1] < 90):
+        base.cam.node().getLens().setFov(current_fov[0]*1.02,current_fov[1]*1.02)
 
+# click and drag to move the camera
+def drag_cam():
+    base.taskMgr.add(cam_drag_task, "drag_cam")
+
+def release_cam():
+    base.taskMgr.remove("drag_cam")
+
+def cam_drag_task(task):
+    if base.mouseWatcherNode.hasMouse():
+        x = base.mouseWatcherNode.getMouseX()                       # get mouse position
+        y = base.mouseWatcherNode.getMouseY()
+    if hasattr(base, 'last_mouse_pos'):                             # if this has run at least once
+        dt = globalClock.get_dt()
+        mouse_move = Vec3(float(x - base.last_mouse_pos[0])*dt, float(y - base.last_mouse_pos[1])*dt, 0.)
+        base.CAM_POS += mouse_move                                  # add change in mouse pos to cam pos
+    base.last_mouse_pos = (x,y)
+    return task.cont
+
+# bind a cell to the player wasd input and initialise camera controls
 def bind_cell(cell):
     base.CAM_POS = CAM_POS
     # awsd/keypad movement for p1 Cell
@@ -36,6 +54,9 @@ def bind_cell(cell):
     base.accept("arrow_down-repeat", cell.move, ["back"])
     base.accept("s", cell.move, ["back"])
     base.accept("s-repeat", cell.move, ["back"])
+
+    base.accept("mouse1", drag_cam)
+    base.accept("mouse1-up", release_cam)
 
     base.accept("wheel_up", zoom_in)
     base.accept("wheel_down", zoom_out)
