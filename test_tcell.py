@@ -2,7 +2,7 @@ from direct.interval.IntervalGlobal import *
 from panda3d.core import (
     Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread, InternalName,
     GeomVertexFormat, GeomVertexData, GeomVertexArrayFormat, GeomNode, ModelRoot,
-    Geom, NodePath, BoundingBox, GeomTrifans, GeomPatches
+    Geom, NodePath, BoundingBox, GeomTrifans, GeomPatches, load_prc_file_data
 )
 import struct
 import numpy as np
@@ -22,6 +22,23 @@ BASIS_VECS = [0.,     0.,
               -.5,    .866,
               -.866,  .5,
               -1.,    0.]
+
+CONFIG: str = """
+gl-version 4 3
+gl-debug true
+gl-debug-buffers true
+//gl-force-glsl-version 430
+gl-support-spirv false
+//premunge-data false
+win-size 1200 800
+//show-frame-rate-meter true
+//model-cache-compiled-shaders false
+hardware-animated-vertices true
+framebuffer-srgb true
+//basic-shaders-only false
+//gl-interleaved-arrays true
+"""
+load_prc_file_data("", CONFIG)
 
 # a PC. cell-like blobby guy that blobs about
 class Cell:
