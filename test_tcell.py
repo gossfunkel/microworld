@@ -49,11 +49,8 @@ class Cell:
 
         print("-- Model generated! Creating SSBO for vertex pulling...")
 
-        # modify geom vertex data from file
-        vtx_data = node.get_child(0).get_geom(0).get_vertex_data()
-
-        # make an SSBO from the model data for vertex pulling
-        p3d_array = vtx_data.get_array_handle(0).get_data()
+        vtx_data = node.get_child(0).get_geom(0).get_vertex_data()  # get geom vertex data and
+        p3d_array = vtx_data.get_array_handle(0).get_data()         #  initialise an SSBO with the vertex data 
         byte_data = bytearray(p3d_array)
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
@@ -73,7 +70,7 @@ class Cell:
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
-        self.nodepath.set_shader_input("lod_level", 32.0)           # TODO make lod level respond to zoom / distance from cam
+        self.nodepath.set_shader_input("lod_level", 4.0)           # TODO make lod level respond to zoom / distance from cam
         self.nodepath.set_shader_input("num_vtxs", self.verts)
         #self.nodepath.set_instance_count(num_instances)             # FIXME what's this about?
 
@@ -138,13 +135,13 @@ class Cell:
 
         # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
         geom     = Geom(vtx_data)                                   # initialise the mesh
+        prim = GeomPatches(3, Geom.UHStatic)                        # create a triangle patch
         for i in range(verts):                                      # do one patch per outer vert
-            prim = GeomPatches(3, Geom.UHStatic)                    #  create a triangle patch
             prim.add_vertex(0)                                      #  centrepoint of circle for trifan style
             prim.add_vertex(i+1)                                    #  first outer vert
             prim.add_vertex((i+2)%verts)                            #  modulo last vert to link end
-            prim.closePrimitive()                                   #  close primitive
-            geom.addPrimitive(prim)                                 #  attach to mesh
+        prim.closePrimitive()                                   #  close primitive
+        geom.addPrimitive(prim)                                 #  attach to mesh
         
         geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, 1.5)))    # set up a bounding volume to prevent culling
         geom.doublesideInPlace()                                    # NOTE not sure this does anything
@@ -311,12 +308,13 @@ class Cell:
 
 if __name__ == '__main__':
     from direct.showbase.ShowBase import ShowBase
-    CAM_POS: Vec3 = Vec3(0,-8,3)        # for keeping the camera a constant vector from the player Cell
+    CAM_POS: Vec3 = Vec3(0,-8,3)                                    # camera pos vector 
 
     ShowBase()
-    base.set_background_color(0.12,0.05,0.22,1.)                # dark background
+    base.set_background_color(0.08,0.02,0.1,1.)                     # dark background
 
-    base.p1 = Cell("p1",Vec2(0., 0.),Vec4(0.,0.,1.,1.), 200, (0,0)) # create test cell
+    base.p1 = Cell("p1",Vec2(0., 0.),Vec4(1.,1.,1.,1.), 300, (0,0)) # create test cell
+
     base.accept("arrow_left", base.p1.move, ["left"])
     base.accept("arrow_left-repeat", base.p1.move, ["left"])
     base.accept("a", base.p1.move, ["left"])
@@ -337,6 +335,7 @@ if __name__ == '__main__':
     base.accept("escape", base.userExit)                            # quickly quit the game
 
     base.cam.set_pos(CAM_POS)
-    base.cam.setHpr(0,-18,0)                                    # look down at your Cell! 
+    #base.cam.setHpr(0,-18,0)                                        # look down at your Cell! 
+    base.cam.look_at(base.p1.nodepath)
 
     base.run()
