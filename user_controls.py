@@ -27,11 +27,11 @@ def cam_drag_task(task):
     if base.mouseWatcherNode.hasMouse():
         x = base.mouseWatcherNode.getMouseX()                       # get mouse position
         y = base.mouseWatcherNode.getMouseY()
-    if hasattr(base, 'last_mouse_pos'):                             # if this has run at least once
-        dt = globalClock.get_dt()
-        mouse_move = Vec3(float(x - base.last_mouse_pos[0])*dt, float(y - base.last_mouse_pos[1])*dt, 0.)
-        base.CAM_POS += mouse_move                                  # add change in mouse pos to cam pos
-    base.last_mouse_pos = (x,y)
+        if hasattr(base, 'last_mouse_pos'):                             # if this has run at least once
+            dt = globalClock.get_dt()
+            mouse_move = Vec3(float(x - base.last_mouse_pos[0])*dt, float(y - base.last_mouse_pos[1])*dt, 0.)
+            base.CAM_POS += mouse_move                                  # add change in mouse pos to cam pos
+        base.last_mouse_pos = (x,y)
     return task.cont
 
 # bind a cell to the player wasd input and initialise camera controls
