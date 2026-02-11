@@ -101,32 +101,35 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 void main() {
     uint vtx = gl_VertexID;
     //v_col = p3d_data[vtx].colour * col;
-    // calculate vertex position relative to model pos after movement
-    vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
-    vec2 desire_vtx = p3d_data[vtx].basis * radius;
-    
-    // calculate new position and vel in 2D model-space
-    vec4 sho_out = SHO(vtx_mod, 
-                  p3d_data[vtx].vel, 
-                  desire_vtx, 
-                  osg_DeltaFrameTime,
-                  10.);
-    vec4 new_pos = vec4(sho_out.xy, 0., 1.);
+    vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
+    if (vtx != 0) {                         // which experiences no harmonic motion
+        // calculate vertex position relative to model pos after movement
+        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+        vec2 desire_vtx = p3d_data[vtx].basis * radius;
+        
+        // calculate new position and vel in 2D model-space
+        vec4 sho_out = SHO(vtx_mod, 
+                      p3d_data[vtx].vel, 
+                      desire_vtx, 
+                      osg_DeltaFrameTime,
+                      10.);
+        new_pos = vec4(sho_out.xy, 0., 1.);
 
-    // calculate drad (in 2D) for tessellation interpolation
-    vec2 diff_pos = vec2(new_pos.xy - vtx_mod.xy);
-    dPos[vtx] = diff_pos.x*diff_pos.x+diff_pos.y*diff_pos.y;
+        // calculate drad (in 2D) for tessellation interpolation
+        vec2 diff_pos = vec2(new_pos.xy - vtx_mod.xy);
+        dPos[vtx] = diff_pos.x*diff_pos.x+diff_pos.y*diff_pos.y;
 
-    // write output to buffers (FIXME relativity??)
-    p3d_data[vtx].pos = new_pos;
-    p3d_data[vtx].vel = sho_out.zw;
-    
-    // calculate gl_Position with the new position and apply matrices
-    //patchout.position = new_pos;
-    // pass data to tess shader
-    //patchout.normal   = p3d_data[vtx].normal;
-    //patchout.colour   = p3d_data[vtx].colour;
-    // update gl_pos
-    //gl_Position = patchout.position;
+        // write output to buffers (FIXME relativity??)
+        p3d_data[vtx].pos = new_pos;
+        p3d_data[vtx].vel = sho_out.zw;
+        
+        // calculate gl_Position with the new position and apply matrices
+        //patchout.position = new_pos;
+        // pass data to tess shader
+        //patchout.normal   = p3d_data[vtx].normal;
+        //patchout.colour   = p3d_data[vtx].colour;
+        // update gl_pos
+        //gl_Position = patchout.position;.
+    }
     gl_Position = new_pos;
 }
