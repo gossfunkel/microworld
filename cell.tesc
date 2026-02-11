@@ -48,17 +48,17 @@ void main() {
 
     // call barrier() to sync between invocations
 
-    // tessellate outer edge only
-    gl_TessLevelOuter[0] = 3;
-    gl_TessLevelOuter[1] = lod_level;
-
     // only tesselate once per triangle
     if (gl_InvocationID == 0) {
         gl_out[gl_InvocationID].gl_Position = gl_in[0].gl_Position;
     } else if (gl_InvocationID == 1) {
+        // tessellate outer edge only
+        gl_TessLevelOuter[0] = 3;
+        gl_TessLevelOuter[1] = lod_level;
+        
         gl_out[gl_InvocationID].gl_Position = gl_in[gl_PrimitiveID+1].gl_Position;
     } else if (gl_InvocationID == 2) {
-        gl_out[gl_InvocationID].gl_Position = gl_in[gl_PrimitiveID+2].gl_Position;
+        gl_out[gl_InvocationID].gl_Position = gl_in[(gl_PrimitiveID+2)%gl_PatchVerticesIn].gl_Position;
     }
 
     // pass vertex positions
