@@ -57,6 +57,9 @@ vec4 catmull_rom(float u, float v, float p0, float p1, float p_1, float p2) {
 //in vec4 vtx_col;
 //out vec4 v_col;
 
+//uniform int num_vtxs;
+in float dPos[];
+
 void main() {
     vec4 centre = gl_in[0].gl_Position;
     vec4 p1 = gl_in[1].gl_Position;
@@ -73,10 +76,10 @@ void main() {
     //vec4 pos = catmull_rom(u,v,p0,p1)
 
     // do radial value interpolation
-    float p1_dR = gl_in[1].gl_PointSize * ((gl_PatchVerticesIn-u)/gl_PatchVerticesIn);
-    float p2_dR = gl_in[2].gl_PointSize * (u/gl_PatchVerticesIn);
+    float p1_dR = gl_in[1].gl_PointSize * (1-u);
+    float p2_dR = gl_in[2].gl_PointSize * u;
     float dR = p1_dR + p2_dR;
-    vec4 norm = p1 * ((gl_PatchVerticesIn-u)/gl_PatchVerticesIn) + p2 * (u/gl_PatchVerticesIn);
+    vec4 norm = p1 * (1-u) + p2 * u;
     vec4 pos = norm * dR;
 
     // apply matrices 

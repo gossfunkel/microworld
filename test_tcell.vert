@@ -13,9 +13,11 @@ const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
 uniform float radius;
 uniform vec2 model_velocity;
+//uniform int num_vtxs;
 //uniform vec4 col;
 
 //out vec4 v_col;
+out float dPos[13];
 
 //layout (location = 0) out Vtx_data patchout;
 
@@ -113,10 +115,7 @@ void main() {
 
     // calculate drad (in 2D) for tessellation interpolation
     vec2 diff_pos = vec2(new_pos.xy - vtx_mod.xy);
-    float dPos = diff_pos.x*diff_pos.x+diff_pos.y*diff_pos.y;
-
-    // use point size variable to pass dPos down pipeline
-    gl_PointSize = dPos;
+    dPos[vtx] = diff_pos.x*diff_pos.x+diff_pos.y*diff_pos.y;
 
     // write output to buffers (FIXME relativity??)
     p3d_data[vtx].pos = new_pos;

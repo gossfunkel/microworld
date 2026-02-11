@@ -71,7 +71,7 @@ class Cell:
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
         self.nodepath.set_shader_input("lod_level", 4.0)           # TODO make lod level respond to zoom / distance from cam
-        self.nodepath.set_shader_input("num_vtxs", self.verts)
+        #self.nodepath.set_shader_input("num_vtxs", self.verts)
         #self.nodepath.set_instance_count(num_instances)             # FIXME what's this about?
 
         print("-- NodePath made and shaders attached. Adding update task...")

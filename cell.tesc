@@ -31,11 +31,11 @@
 
 uniform float lod_level;
 
-uniform int num_vecs;
-
 //layout (location = 0) in Vtx_data patchout[];
 layout(vertices = 3) out;
 //layout(location = 1) out Vtx_data vtx_tesc[];
+
+
 
 //in vec2 texcoords_pch[];
 //out vec2 texcoords_vtx[];
