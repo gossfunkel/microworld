@@ -151,8 +151,8 @@ class Cell:
         # activate the jiggle shader on the Cell
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="cell_jiggle.vert", fragment="default_shader.frag"))
         self.nodepath.set_shader_input("ssbo", self.buffer)
-        self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
+        self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("col", self.col)
 
         # now set up accessories
@@ -265,8 +265,8 @@ class Cell:
               ((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE < 0.)):
             check_chunks.append((self.uv[0],self.uv[1]-1))
 
-        chunks_to_load = base.check_loaded_chunks(check_chunks)
-        base.load_chunks(chunks_to_load)
+        chunks_to_load = base.check_loaded_chunks(check_chunks)     # check which chunks are loaded
+        base.load_chunks(chunks_to_load)                            # load any remaining chunks
 
         # collision detection - get items loaded from chunks
         check_items = []
@@ -278,7 +278,6 @@ class Cell:
             #print(f"checking item: {item}")
             #print(f"blob 2D pos: {self.pos().xy}, item 2D pos: {item.nodepath.get_pos().xy}")
             if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy,0.)) < (self.radius + item.radius):
-                #if isinstance(item, Mol):
                 if hasattr(item, 'ismol'):
                     #print(f"adding mol {item}")
                     self.add_mol(item)

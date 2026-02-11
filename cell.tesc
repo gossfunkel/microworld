@@ -35,8 +35,6 @@ uniform float lod_level;
 layout(vertices = 3) out;
 //layout(location = 1) out Vtx_data vtx_tesc[];
 
-
-
 //in vec2 texcoords_pch[];
 //out vec2 texcoords_vtx[];
 
@@ -50,18 +48,19 @@ void main() {
 
     // call barrier() to sync between invocations
 
+    // tessellate outer edge only
+    gl_TessLevelOuter[0] = 3;
+    gl_TessLevelOuter[1] = lod_level;
+
     // only tesselate once per triangle
     if (gl_InvocationID == 0) {
-        // tessellate outer edge only
-        gl_TessLevelOuter[0] = 0;
-        gl_TessLevelOuter[1] = lod_level;
-        gl_TessLevelOuter[2] = 0;
-
-        //gl_out[gl_InvocationID+1].gl_Position = gl_in[1].gl_Position;
-        //gl_out[gl_InvocationID+2].gl_Position = gl_in[2].gl_Position;
+        gl_out[gl_InvocationID].gl_Position = gl_in[0].gl_Position;
+    } else if (gl_InvocationID == 1) {
+        gl_out[gl_InvocationID].gl_Position = gl_in[gl_PrimitiveID+1].gl_Position;
+    } else if (gl_InvocationID == 2) {
+        gl_out[gl_InvocationID].gl_Position = gl_in[gl_PrimitiveID+2].gl_Position;
     }
 
     // pass vertex positions
-    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
     //vtx_col = v_col;
 }

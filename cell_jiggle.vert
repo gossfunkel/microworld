@@ -10,8 +10,9 @@ layout (std430, binding = 0) buffer ssbo {
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform float osg_DeltaFrameTime;
 
-const float EPSILON = 0.0001;
-const float DAMP_RATIO = .3;              // sets springyness of object
+const float EPSILON = 0.0001;               // a really small number
+const float DAMP_RATIO = .3;                // sets springyness of cell verts
+
 uniform float radius;
 uniform vec2 model_velocity;
 //uniform vec4 col;
