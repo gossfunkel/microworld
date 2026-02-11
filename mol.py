@@ -269,7 +269,10 @@ class Cell:
         base.load_chunks(chunks_to_load)
 
         # collision detection - get items loaded from chunks
-        check_items = base.get_chunks()
+        check_items = []
+        for chunk in base.get_chunks():
+            #print(f"Adding chunk {chunk} to check_items from {base.get_chunks()}")
+            check_items += chunk
         # check all items in nearby chunks
         for item in check_items:
             #print(f"checking item: {item}")
@@ -280,7 +283,6 @@ class Cell:
                     #print(f"adding mol {item}")
                     self.add_mol(item)
                     base.get_chunk(item.uv).remove(item)
-                    #check_items.remove(item)
                 else:
                     self.colliding = True
                     # self.nodepath.setshaderinput("colliding", self.colliding)

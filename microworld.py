@@ -110,9 +110,10 @@ class GameBase(ShowBase):
 
         self.p1 = mol.Cell("p1",Vec2(0., 0.),Vec4(0.,0.,1.,1.), 200, (0,0))    # create player 1's Cell
         self.p2 = mol.Cell("p2",Vec2(0., 25.),Vec4(0.,1.,0.,1.), 300, (0,0))   # create a second Cell
-        self.grid[0][0].append(self.p1)
-        self.grid[0][0].append(self.p2)
-        self.chunks = self.get_chunk((0,0))
+        self.grid[0,0].append(self.p1)
+        self.grid[0,0].append(self.p2)
+        self.chunks = []
+        self.load_chunk((0,0))
 
         # mol counter
         self.p1_label_v = TextNode("0")
@@ -187,9 +188,12 @@ class GameBase(ShowBase):
             self.grid[i%9,i//9] = self.load_level_random(((i%9)-4,(i//9)-4))
         return self.grid
 
-    def get_chunk(self, uv: tuple[int]):
+    # find a chunk in the grid by uv coords
+    def get_chunk(self, uv: tuple[int]) -> list:
         # calculate actual array indices for given uvs (i.e. -1,-1 = 0,0 for a 3x3 grid)
         gridsize = self.grid.shape
+        assert abs(uv[0]) <= gridsize[0]//2, f"REQUESTING CHUNK OUT OF BOUNDS ON U: {uv[0]}"
+        assert abs(uv[1]) <= gridsize[1]//2, f"REQUESTING CHUNK OUT OF BOUNDS ON V: {uv[1]}"
         return self.grid[uv[0]+gridsize[0]//2, uv[1]+gridsize[1]//2]
 
     # get the cache of chunk data
@@ -202,16 +206,21 @@ class GameBase(ShowBase):
 
     # load data from chunk at uv into collision cache 
     def load_chunk(self, uv: tuple[int]):
-        for item in base.get_chunk((uv[0],uv[1])):
-            self.chunks.append(item)
+        #for item in base.get_chunk((uv[0],uv[1])):
+        #    self.chunks.append(item)
+        chunk = base.get_chunk(uv)
+        #print(f"Loading chunk {chunk}")
+        self.chunks.append(chunk)
         self.loaded_chunks.append(uv)
         #self.get_chunk((uv[0],uv[1])) = None
 
     # load data from multiple chunks at uvs in list into collision cache 
     def load_chunks(self, uvs: list[tuple[int]]):
         for uv in uvs:
-            for item in base.get_chunk((uv[0],uv[1])):
-                self.chunks.append(item)
+            #for item in base.get_chunk((uv[0],uv[1])):
+            #    self.chunks.append(item)
+            chunk = base.get_chunk(uv)
+            self.chunks.append(chunk)
             self.loaded_chunks.append(uv)                           # take note of which chunks have been loaded
             #self.get_chunk((uv[0],uv[1])) = None
 
