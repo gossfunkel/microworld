@@ -279,7 +279,7 @@ class Cell:
                     #print(f"adding mol {item}")
                     self.add_mol(item)
                     base.get_chunk(item.uv).remove(item)
-                    check_items.remove(item)
+                    #check_items.remove(item)
                 else:
                     self.colliding = True
                     # self.nodepath.setshaderinput("colliding", self.colliding)

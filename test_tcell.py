@@ -9,7 +9,8 @@ import numpy as np
 
 EPSILON: float = .0001              # a very small change
 TAU: float = np.pi * 2              # for calculating circles
-BASIS_VECS = [-.866, -.5,
+BASIS_VECS = [0.,     0.,
+              -.866, -.5,
               -.5,   -.866,
               0.,    -1.,
               .5,    -.866,
@@ -25,7 +26,7 @@ BASIS_VECS = [-.866, -.5,
 # a PC. cell-like blobby guy that blobs about
 class Cell:
     def __init__(self, name: str, pos: Vec2, col: Vec4, bong_freq: float, uv: tuple[int]) -> None:
-        # TODO move data into C++ obj tags or VBO
+        print(f"== Creating new cell: {name} at {pos}...")
         self.name            = name
         self.col: tuple      = col
         #self.uv              = uv            # coordinate in the grid
@@ -46,22 +47,21 @@ class Cell:
         #node = self.load_model("cell_default.bam")
         node = self.gen_model(self.verts)
 
+        print("-- Model generated! Creating SSBO for vertex pulling...")
+
         # modify geom vertex data from file
-        #print(node.get_child(0).get_geom(0))#print(f"VBO data from file: {vtx_data}")
         vtx_data = node.get_child(0).get_geom(0).get_vertex_data()
 
         # make an SSBO from the model data for vertex pulling
         p3d_array = vtx_data.get_array_handle(0).get_data()
-        #custom_array = vtx_data.get_array_handle(1).get_data()
         byte_data = bytearray(p3d_array)
-        #byte_data.extend(custom_array)
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
 
-        self.nodepath = base.render.attach_new_node(node)
-        # store position in the node 
-        self.nodepath.set_pos(pos.x, pos.y, 0)
-        # give the Cell a depth offset to prevent self-shadowing etc
-        self.nodepath.setDepthOffset(1)
+        print("-- SSBO constructed. Creating cell NodePath...")
+
+        self.nodepath = base.render.attach_new_node(node)           # attach nodepath to render
+        self.nodepath.set_pos(pos.x, pos.y, 0)                      # store position in the node 
+        self.nodepath.setDepthOffset(1)                             # give the Cell a depth offset to prevent self-shadowing etc
 
         # activate the jiggle shader on the Cell
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, 
@@ -73,9 +73,11 @@ class Cell:
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
-        self.nodepath.set_shader_input("lod_level", 32.0)
+        self.nodepath.set_shader_input("lod_level", 32.0)           # TODO make lod level respond to zoom / distance from cam
         self.nodepath.set_shader_input("num_vtxs", self.verts)
-        self.nodepath.set_instance_count(num_instances)
+        #self.nodepath.set_instance_count(num_instances)             # FIXME what's this about?
+
+        print("-- NodePath made and shaders attached. Adding update task...")
 
         # now set up accessories
         #self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
@@ -97,6 +99,9 @@ class Cell:
         return node
 
     def gen_model(self, verts: int):
+        print("== Generate new cell model: ")
+        print("-- Constructing vertex format...")
+
         vtx_format  = GeomVertexFormat()
         arrayFormat = GeomVertexArrayFormat()
         arrayFormat.set_divisor(0)
@@ -110,55 +115,58 @@ class Cell:
         vtx_format.add_array(arrayFormat)
         vtx_format  = GeomVertexFormat.register_format(vtx_format)
         vtx_data    = GeomVertexData('cell_verts', vtx_format, Geom.UHStatic)
-        vtx_data.unclean_set_num_rows(verts) # 1 row per vertex 
+        vtx_data.unclean_set_num_rows(verts+1)                      # 1 row per vertex + 1 for centre
 
-        print("-- Formats registered. Creating geometry...")
+        print("-- Formats registered. Creating vertices...")
 
-        # open memoryviews to write position, normal, colour, basis, and velocity data to VBO
+        # open memoryview to write position, normal, colour, basis, and velocity data to VBO
         view   = memoryview(vtx_data.modify_array(0)).cast('B')
-        #stride = 24
 
         vals = bytearray()
-        for i in range(verts):
-            # populate the bytearray with each row
-            zcoord = 1. if i == 0 else 0.                                   # quick and dirty raised middle
+        for i in range(verts+1):                                    # populate the bytearray with each row
+            zcoord = 1. if i == 0 else 0.                           #  quick and dirty raised middle
             vals.extend(struct.pack('4f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1], zcoord, 1.))
             vals.extend(struct.pack('4f', BASIS_VECS[i*2]/2.,BASIS_VECS[i*2 + 1]/2., 1., 0.))
-            vals.extend(struct.pack('4f', 1., 1., 1., 1.))
+            vals.extend(struct.pack('4f', 1., 1., 1., 1.))          #  col
             vals.extend(struct.pack('2f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1]))
-            vals.extend(struct.pack('2f', 0., 0.))
+            vals.extend(struct.pack('2f', 0., 0.))                  #  vel
 
         # write to VBO
         view[:] = vals
 
+        print("-- VBO written. Creating geometry...")
+
         # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
-        geom     = Geom(vtx_data)
-        #blobPrim = GeomTrifans(Geom.UHStatic)
-        blobPrim = GeomPatches(verts, Geom.UHStatic)
-        blobPrim.add_consecutive_vertices(0,verts) # add all the verts
-        blobPrim.closePrimitive()
-        geom.addPrimitive(blobPrim)
-        # set up a bounding volume to prevent culling
-        geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))
-        geom.doublesideInPlace()
-        geom_node = GeomNode('cell-geom_node')
+        geom     = Geom(vtx_data)                                   # initialise the mesh
+        for i in range(verts):                                      # do one patch per outer vert
+            prim = GeomPatches(3, Geom.UHStatic)                    #  create a triangle patch
+            prim.add_vertex(0)                                      #  centrepoint of circle for trifan style
+            prim.add_vertex(i+1)                                    #  first outer vert
+            prim.add_vertex((i+2)%verts)                            #  modulo last vert to link end
+            prim.closePrimitive()                                   #  close primitive
+            geom.addPrimitive(prim)                                 #  attach to mesh
+        
+        geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, 1.5)))    # set up a bounding volume to prevent culling
+        geom.doublesideInPlace()                                    # NOTE not sure this does anything
+        geom_node = GeomNode('cell-geom_node')                      # create a node for the mesh
         geom_node.addGeom(geom)
 
-        print("-- Mesh made. Creating NodePath...")
+        print("-- Mesh made. Creating model root...")
 
-        # Ensure mesh has a root
-        root = ModelRoot("Cell_model_root")
+        root = ModelRoot("Cell_model_root")                         # ensure model has a root 
         root.addChild(geom_node)
-        return root
+
+        print(f"== Model {root} constructed!")
+        return root                                                 # return the model root
 
     # alias to make this quicker
     def pos(self) -> Vec3:
         return self.nodepath.get_pos()
 
     def grow(self):
-        # self.max_hp += 1.                                           # increase maximum health
-        # self.radius *= 1.1                                          # make the Cell bigger
-        # self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
+        # self.max_hp += 1.                                         # increase maximum health
+        # self.radius *= 1.1                                        # make the Cell bigger
+        # self.nrg_loss_rate += .001                                # lose energy faster BALANCE
         self.nodepath.set_shader_input("radius", self.radius)       # update the shader
 
     # def make_mol(self, *mols: MOLTYPE):

@@ -1,9 +1,10 @@
 #version 430
+#extension GL_GOOGLE_include_directive : require
 
 uniform float osg_DeltaFrameTime;
 
 // SSBO for vertex pulling
-#pragma include "cell.common"
+#include "cell.glsl"
 layout (std430, binding = 0) buffer ssbo { 
     P3d_data p3d_data[13];          //  = 64B x 13 
 };                                  // = 832B buffer
@@ -12,9 +13,9 @@ const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
 uniform float radius;
 uniform vec2 model_velocity;
-uniform vec4 col;
+//uniform vec4 col;
 
-out vec4 v_col;
+//out vec4 v_col;
 
 //layout (location = 0) out Vtx_data patchout;
 
@@ -97,7 +98,7 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 
 void main() {
     uint vtx = gl_VertexID;
-    v_col = p3d_data[vtx].colour * col;
+    //v_col = p3d_data[vtx].colour * col;
     // calculate vertex position relative to model pos after movement
     vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
     vec2 desire_vtx = p3d_data[vtx].basis * radius;
@@ -109,6 +110,14 @@ void main() {
                   osg_DeltaFrameTime,
                   10.);
     vec4 new_pos = vec4(sho_out.xy, 0., 1.);
+
+    // calculate drad (in 2D) for tessellation interpolation
+    vec2 diff_pos = vec2(new_pos.xy - vtx_mod.xy);
+    float dPos = diff_pos.x*diff_pos.x+diff_pos.y*diff_pos.y;
+
+    // use point size variable to pass dPos down pipeline
+    gl_PointSize = dPos;
+
     // write output to buffers (FIXME relativity??)
     p3d_data[vtx].pos = new_pos;
     p3d_data[vtx].vel = sho_out.zw;

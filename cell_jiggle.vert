@@ -1,21 +1,23 @@
 #version 430
-
-uniform mat4 p3d_ModelViewProjectionMatrix;
-uniform float osg_DeltaFrameTime;
+#extension GL_GOOGLE_include_directive : require
 
 // SSBO for vertex pulling
-#pragma include "cell.common"
+#include  "cell.glsl"
 layout (std430, binding = 0) buffer ssbo { 
     P3d_data p3d_data[13];          //  = 64B x 13 
 };                                  // = 832B buffer
+
+uniform mat4 p3d_ModelViewProjectionMatrix;
+uniform float osg_DeltaFrameTime;
 
 const float EPSILON = 0.0001;
 const float DAMP_RATIO = .3;              // sets springyness of object
 uniform float radius;
 uniform vec2 model_velocity;
-uniform vec4 col;
+//uniform vec4 col;
 
-out vec4 v_col;
+// disabled while testing tess shaders
+//out vec4 v_col;
 
 vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angularFreq) {
     // SHM angular frequency parameter must be positive!
@@ -96,7 +98,7 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 
 void main() {
     uint vtx = gl_VertexID;
-    v_col = p3d_data[vtx].colour * col;
+    //v_col = p3d_data[vtx].colour * col;
     vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
     if (vtx != 0) {                         // which experiences no harmonic motion
         // get the 2D vertex positions in world-space
