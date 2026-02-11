@@ -11,6 +11,7 @@ import struct
 import copy
 from rock import Rock
 import mol
+import user_controls as controls
 
 TAU: float = np.pi * 2              # for calculating circles
 
@@ -19,9 +20,6 @@ TAU: float = np.pi * 2              # for calculating circles
 # TODO: the cells and rocks don't interact. They should slide past/off each other
 # TODO: spatial partitioning. This ^ and the mol-collection would benefit a lot
 # verticality; since we can only move on a plane, the z-dim could be used to make things inaccessible?
-
-# TODO update camera position when player Cell gets significantly bigger
-CAM_POS: Vec3 = Vec3(0,-8,3)        # for keeping the camera a constant vector from the player Cell
 
 CONFIG: str = """
 gl-version 4 3
@@ -176,31 +174,7 @@ class GameBase(ShowBase):
         hp_label_v_np = aspect2d.attach_new_node(self.hp_label_v)
         hp_label_v_np.set_pos((-.97,0.,-.72))
 
-        # awsd/keypad movement for p1 Cell
-        self.accept("arrow_left", self.p1.move, ["left"])
-        self.accept("arrow_left-repeat", self.p1.move, ["left"])
-        self.accept("a", self.p1.move, ["left"])
-        self.accept("a-repeat", self.p1.move, ["left"])
-        self.accept("arrow_right", self.p1.move, ["right"])
-        self.accept("arrow_right-repeat", self.p1.move, ["right"])
-        self.accept("d", self.p1.move, ["right"])
-        self.accept("d-repeat", self.p1.move, ["right"])
-        self.accept("arrow_up", self.p1.move, ["fwd"])
-        self.accept("arrow_up-repeat", self.p1.move, ["fwd"])
-        self.accept("w", self.p1.move, ["fwd"])
-        self.accept("w-repeat", self.p1.move, ["fwd"])
-        self.accept("arrow_down", self.p1.move, ["back"])
-        self.accept("arrow_down-repeat", self.p1.move, ["back"])
-        self.accept("s", self.p1.move, ["back"])
-        self.accept("s-repeat", self.p1.move, ["back"])
-        
-        self.accept("r", self.p1.make_mol, [mol.MOLTYPE.FRNA])        # make an frna mol from energy
-        self.accept("f", self.p1.make_mol, [mol.MOLTYPE.FOOD])        # make an frna mol from energy
-        self.accept("space", self.p1.consume_mol)                  # consume a mol
-        self.accept("escape", self.userExit)                        # quickly quit the game
-
-        self.cam.setPos(CAM_POS)                                    # spawn camera distance from origin
-        self.cam.setHpr(0,-18,0)                                    # look down at your Cell! 
+        controls.bind_cell(self.p1)
 
         self.taskMgr.add(self.update, "update")                     # global game update
 
@@ -309,7 +283,7 @@ class GameBase(ShowBase):
         return chunk
 
     def update(self, task):
-        self.cam.setPos(self.p1.pos() + CAM_POS)                    # camera follows p1
+        self.cam.setPos(self.p1.pos() + self.CAM_POS)                    # camera follows p1
         # print(f"Cellpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
         self.p1_label_v.setText(str(self.p1.num_mols))             # update UI
         #self.p2_label_v.setText(str(self.p2.num_mols))
