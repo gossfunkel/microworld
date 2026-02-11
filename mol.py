@@ -1,3 +1,4 @@
+
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
     Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread
@@ -33,7 +34,8 @@ class Mol:
         # self.velocity: Vec3 = Vec3(0,0,np.random.uniform(-.1,.05))
         self.angle = 0
         self.orbiting = True if cell is not None else False
-        self.uv = uv
+        self.uv    = uv
+        self.ismol = True
 
         model = base.loader.load_model("sphere.egg")
         #model.setTransparency(1)
@@ -222,7 +224,7 @@ class Cell:
                 self.speed *= 1.5                                   # increase cell speed
 
     def add_mol(self, mol=None, mols: int = 1):
-        print(f"adding mol to {self.name}")
+        #print(f"adding mol to {self.name}")
         self.mols.append(mol)                                       # add mol to mols
         mol.cell = self                                             # change mol references to self
         mol.index = self.num_mols                                   # n.b. this is only incremented at the end of method
@@ -247,30 +249,37 @@ class Cell:
                    int((self.pos().y + yneg*base.CHUNK_SIZE//2)//base.CHUNK_SIZE))
         #print(f"{self.name} uv is {self.uv}")
 
+        check_chunks = [self.uv]
         # load chunks as cell approaches them
-        if (((self.pos().x+base.CHUNK_SIZE/2) < self.radius) & 
-            ((self.nodepath.get_pos().x+base.CHUNK_SIZE/2) > 0.)):
-            base.load_chunk((self.uv[0]+1,self.uv[1]))
-        elif (((self.pos().x-base.CHUNK_SIZE/2) > self.radius) & 
-            ((self.nodepath.get_pos().x-base.CHUNK_SIZE/2) < 0.)):
-            base.load_chunk(self.uv[0]-1,self.uv[1])
-        if (((self.pos().y+base.CHUNK_SIZE/2) < self.radius) & 
-            ((self.pos().y+base.CHUNK_SIZE/2) > 0.)):
-            base.load_chunk((self.uv[0],self.uv[1]+1))
-        elif (((self.nodepath.get_pos().y-base.CHUNK_SIZE/2) > self.radius) & 
-            ((self.pos().y-base.CHUNK_SIZE/2) < 0.)):
-            base.load_chunk((self.uv[0],self.uv[1]-1))
+        if (((self.pos().x+base.CHUNK_SIZE/2)%base.CHUNK_SIZE < self.radius) & 
+            ((self.pos().x+base.CHUNK_SIZE/2)%base.CHUNK_SIZE > 0.)):
+            check_chunks.append((self.uv[0]+1,self.uv[1]))
+        elif (((self.pos().x-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > self.radius) & 
+              ((self.pos().x-base.CHUNK_SIZE/2)%base.CHUNK_SIZE < 0.)):
+            check_chunks.append((self.uv[0]-1,self.uv[1]))
+        if (((self.pos().y+base.CHUNK_SIZE/2)%base.CHUNK_SIZE < self.radius) & 
+            ((self.pos().y+base.CHUNK_SIZE/2)%base.CHUNK_SIZE > 0.)):
+            check_chunks.append((self.uv[0],self.uv[1]+1))
+        elif (((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE > self.radius) & 
+              ((self.pos().y-base.CHUNK_SIZE/2)%base.CHUNK_SIZE < 0.)):
+            check_chunks.append((self.uv[0],self.uv[1]-1))
+
+        chunks_to_load = base.check_loaded_chunks(check_chunks)
+        base.load_chunks(chunks_to_load)
 
         # collision detection - get items loaded from chunks
-        check_items = base.get_loaded_chunks()
+        check_items = base.get_chunks()
         # check all items in nearby chunks
         for item in check_items:
             #print(f"checking item: {item}")
-            if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy, 0)) < (self.radius + item.radius):
-                if isinstance(item, Mol):
-                    print(f"adding mol {item}")
+            #print(f"blob 2D pos: {self.pos().xy}, item 2D pos: {item.nodepath.get_pos().xy}")
+            if ABS_DIST(self.pos(), Vec3(item.nodepath.get_pos().xy,0.)) < (self.radius + item.radius):
+                #if isinstance(item, Mol):
+                if hasattr(item, 'ismol'):
+                    #print(f"adding mol {item}")
                     self.add_mol(item)
                     base.get_chunk(item.uv).remove(item)
+                    check_items.remove(item)
                 else:
                     self.colliding = True
                     # self.nodepath.setshaderinput("colliding", self.colliding)

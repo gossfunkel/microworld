@@ -6,17 +6,18 @@
 //gl_PrimitiveID     // current patch
 //gl_InvocationID    // current vertex within patch
 
-// uniform float lod_level;
+uniform float lod_level;
 
-// SSBO for vertex pulling
-#pragma include cell.common
-layout (std430, binding = 0) buffer ssbo { 
-    P3d_data p3d_data[13];          //  = 64B x 13 
-};                                  // = 832B buffer
+uniform int num_vecs;
 
-layout (location = 0) in Vtx_data patchout[];
-layout(vertices = 3) out;
-layout(location = 1) out Vtx_data vtx_tesc[];
+#pragma include "cell.common"
+
+//layout (location = 0) in Vtx_data patchout[];
+layout(vertices = 2) out;
+//layout(location = 1) out Vtx_data vtx_tesc[];
+
+patch out vec4 p_1;
+patch out vec4 p2;
 
 //in vec2 texcoords_pch[];
 //out vec2 texcoords_vtx[];
@@ -24,6 +25,14 @@ layout(location = 1) out Vtx_data vtx_tesc[];
 void main() {
     gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
     //texcoords_pch[gl_InvocationID] = texcoords_vtx[gl_InvocationID];
+    if (gl_InvocationID == 0) {
+        gl_TessLevelOuter[gl_InvocationID] = lod_level;
 
-    gl_TessLevelOuter[0] = 
+        p_1 = gl_in[(-1)%num_vecs].gl_Position;
+        p2 = gl_in[3].gl_Position;
+
+        gl_out[gl_InvocationID].gl_Position = gl_in[1].gl_Position;
+    } else if (gl_InvocationID == 1) {
+        gl_out[gl_InvocationID].gl_Position = gl_in[2].gl_Position;
+    }
 }

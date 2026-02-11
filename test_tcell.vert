@@ -1,10 +1,9 @@
 #version 430
 
-uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform float osg_DeltaFrameTime;
 
 // SSBO for vertex pulling
-#pragma include cell.common
+#pragma include "cell.common"
 layout (std430, binding = 0) buffer ssbo { 
     P3d_data p3d_data[13];          //  = 64B x 13 
 };                                  // = 832B buffer
@@ -17,7 +16,7 @@ uniform vec4 col;
 
 out vec4 v_col;
 
-layout (location = 0) out Vtx_data patchout;
+//layout (location = 0) out Vtx_data patchout;
 
 vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angularFreq) {
     // SHM angular frequency parameter must be positive!
@@ -99,29 +98,27 @@ vec4 SHO(vec2 pos, vec2 vel, vec2 equilibriumPos, float deltaTime, float angular
 void main() {
     uint vtx = gl_VertexID;
     v_col = p3d_data[vtx].colour * col;
-    vec4 new_pos = vec4(0.,0.,0.,1.);       // default value for centrepoint, 
-    if (vtx != 0) {                         // which experiences no harmonic motion
-        // calculate vertex position relative to centrepoint after movement
-        vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
-        vec2 desire_vtx = p3d_data[vtx].basis * radius;
-        
-        // calculate new position and vel in 2D model-space
-        vec4 sho_out = SHO(vtx_mod, 
-                      p3d_data[vtx].vel, 
-                      desire_vtx, 
-                      osg_DeltaFrameTime,
-                      10.);
-        new_pos = vec4(sho_out.xy, 0., 1.);
-        // write output to buffers (FIXME relativity??)
-        p3d_data[vtx].pos = new_pos;
-        p3d_data[vtx].vel = sho_out.zw;
-    } 
+    // calculate vertex position relative to model pos after movement
+    vec2 vtx_mod = p3d_data[vtx].pos.xy - model_velocity;
+    vec2 desire_vtx = p3d_data[vtx].basis * radius;
+    
+    // calculate new position and vel in 2D model-space
+    vec4 sho_out = SHO(vtx_mod, 
+                  p3d_data[vtx].vel, 
+                  desire_vtx, 
+                  osg_DeltaFrameTime,
+                  10.);
+    vec4 new_pos = vec4(sho_out.xy, 0., 1.);
+    // write output to buffers (FIXME relativity??)
+    p3d_data[vtx].pos = new_pos;
+    p3d_data[vtx].vel = sho_out.zw;
     
     // calculate gl_Position with the new position and apply matrices
-    patchout.position = p3d_ModelViewProjectionMatrix * new_pos;
+    //patchout.position = new_pos;
     // pass data to tess shader
-    patchout.normal   = p3d_data[vtx].normal;
-    patchout.colour   = p3d_data[vtx].colour;
+    //patchout.normal   = p3d_data[vtx].normal;
+    //patchout.colour   = p3d_data[vtx].colour;
     // update gl_pos
-    gl_Position = patchout.position;
+    //gl_Position = patchout.position;
+    gl_Position = new_pos;
 }

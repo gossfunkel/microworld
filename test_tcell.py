@@ -1,11 +1,26 @@
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
-    Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread
+    Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread, InternalName,
+    GeomVertexFormat, GeomVertexData, GeomVertexArrayFormat, GeomNode, ModelRoot,
+    Geom, NodePath, BoundingBox, GeomTrifans, GeomPatches
 )
+import struct
 import numpy as np
 
 EPSILON: float = .0001              # a very small change
 TAU: float = np.pi * 2              # for calculating circles
+BASIS_VECS = [-.866, -.5,
+              -.5,   -.866,
+              0.,    -1.,
+              .5,    -.866,
+              .866,  -.5,
+              1.,     0.,
+              .866,   .5,
+              .5,     .866,
+              0.,     1.,
+              -.5,    .866,
+              -.866,  .5,
+              -1.,    0.]
 
 # a PC. cell-like blobby guy that blobs about
 class Cell:
@@ -16,8 +31,8 @@ class Cell:
         #self.uv              = uv            # coordinate in the grid
 
         self.radius: float   = 2.
-        self.verts: int      = 12            # number of OUTER vertices (Cell requires centre)
-        self.velocity        = Vec2(0.,0.)   # initial speed
+        self.verts: int      = 12             # number of OUTER vertices
+        self.velocity        = Vec2(0.,0.)    # initial speed
         #self.colliding       = False         # flag for if Cell is colliding with something
 
         # self.max_hp: float   = 10.           # maximum health
@@ -25,15 +40,11 @@ class Cell:
         # self.max_nrg: float  = 10.           # maximum energy
         # self.nrg: float      = self.max_nrg  # current energy
         # self.nrg_loss_rate   = .001          # rate of energy loss BALANCE
-        self.speed: float    = 1.            # amount to add to position per frame per dt
+        self.speed: float    = 1.              # amount to add to position per frame per dt
         # self.salinity: float = 0.            # current salt level
 
-        print(f"Loading {self.name} VBO data...")
-        # load the default Cell from file
-        loaded_file = BamFile()
-        loaded_file.open_read("cell_default.bam")
-        node = loaded_file.read_node()
-        loaded_file.close()
+        #node = self.load_model("cell_default.bam")
+        node = self.gen_model(self.verts)
 
         # modify geom vertex data from file
         #print(node.get_child(0).get_geom(0))#print(f"VBO data from file: {vtx_data}")
@@ -53,11 +64,18 @@ class Cell:
         self.nodepath.setDepthOffset(1)
 
         # activate the jiggle shader on the Cell
-        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="cell_jiggle.vert", fragment="default_shader.frag"))
+        self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, 
+                                             vertex="test_tcell.vert", 
+                                             tess_control = "cell.tesc",
+                                             tess_evaluation = "cell.tese",
+                                             fragment="default_shader.frag"))
         self.nodepath.set_shader_input("ssbo", self.buffer)
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("col", self.col)
+        self.nodepath.set_shader_input("lod_level", 32.0)
+        self.nodepath.set_shader_input("num_vtxs", self.verts)
+        self.nodepath.set_instance_count(num_instances)
 
         # now set up accessories
         #self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
@@ -68,6 +86,70 @@ class Cell:
         base.taskMgr.add(self.update, str(name)+"-update")
 
         print(f"== Cell {name} created!")
+
+    def load_model(self, model_filename):
+        print(f"Loading {self.name} VBO data...")
+        # load the default Cell from file
+        loaded_file = BamFile()
+        loaded_file.open_read(model_filename)
+        node = loaded_file.read_node()
+        loaded_file.close()
+        return node
+
+    def gen_model(self, verts: int):
+        vtx_format  = GeomVertexFormat()
+        arrayFormat = GeomVertexArrayFormat()
+        arrayFormat.set_divisor(0)
+        arrayFormat.set_stride(64)
+        arrayFormat.add_column(InternalName.get_vertex(),4,GeomEnums.NT_float32, GeomEnums.C_point)
+        arrayFormat.add_column(InternalName.get_normal(),4,GeomEnums.NT_float32, GeomEnums.C_normal)
+        arrayFormat.add_column(InternalName.get_color(),4,GeomEnums.NT_float32, GeomEnums.C_color)
+        arrayFormat.add_column(InternalName.get_vertex().get_parent().append("basis"),2,GeomEnums.NT_float32, GeomEnums.C_point)
+        arrayFormat.add_column(InternalName.get_vertex().get_parent().append("velocity"),2,GeomEnums.NT_float32, GeomEnums.C_point)
+        arrayFormat.pack_columns()
+        vtx_format.add_array(arrayFormat)
+        vtx_format  = GeomVertexFormat.register_format(vtx_format)
+        vtx_data    = GeomVertexData('cell_verts', vtx_format, Geom.UHStatic)
+        vtx_data.unclean_set_num_rows(verts) # 1 row per vertex 
+
+        print("-- Formats registered. Creating geometry...")
+
+        # open memoryviews to write position, normal, colour, basis, and velocity data to VBO
+        view   = memoryview(vtx_data.modify_array(0)).cast('B')
+        #stride = 24
+
+        vals = bytearray()
+        for i in range(verts):
+            # populate the bytearray with each row
+            zcoord = 1. if i == 0 else 0.                                   # quick and dirty raised middle
+            vals.extend(struct.pack('4f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1], zcoord, 1.))
+            vals.extend(struct.pack('4f', BASIS_VECS[i*2]/2.,BASIS_VECS[i*2 + 1]/2., 1., 0.))
+            vals.extend(struct.pack('4f', 1., 1., 1., 1.))
+            vals.extend(struct.pack('2f', BASIS_VECS[i*2],   BASIS_VECS[i*2 + 1]))
+            vals.extend(struct.pack('2f', 0., 0.))
+
+        # write to VBO
+        view[:] = vals
+
+        # finally, create a mesh ('Geom') from the vertices- containing one trifan defined above as blobPrim
+        geom     = Geom(vtx_data)
+        #blobPrim = GeomTrifans(Geom.UHStatic)
+        blobPrim = GeomPatches(verts, Geom.UHStatic)
+        blobPrim.add_consecutive_vertices(0,verts) # add all the verts
+        blobPrim.closePrimitive()
+        geom.addPrimitive(blobPrim)
+        # set up a bounding volume to prevent culling
+        geom.set_bounds(BoundingBox((-1, -1, -.5), (1, 1, .5)))
+        geom.doublesideInPlace()
+        geom_node = GeomNode('cell-geom_node')
+        geom_node.addGeom(geom)
+
+        print("-- Mesh made. Creating NodePath...")
+
+        # Ensure mesh has a root
+        root = ModelRoot("Cell_model_root")
+        root.addChild(geom_node)
+        return root
 
     # alias to make this quicker
     def pos(self) -> Vec3:

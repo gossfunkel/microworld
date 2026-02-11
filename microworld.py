@@ -95,7 +95,7 @@ class GameBase(ShowBase):
         ShowBase.__init__(self)
         self.set_background_color(0.12,0.05,0.22,1.)                # dark background
         self.CHUNK_SIZE = CHUNK_SIZE
-        self.loaded_chunks = None
+        self.loaded_chunks = [(0,0)]
 
         #render.setAntialias(AntialiasAttrib.MAuto)                 # set global antialiasing
         #render.setShaderAuto()
@@ -114,7 +114,7 @@ class GameBase(ShowBase):
         self.p2 = mol.Cell("p2",Vec2(0., 25.),Vec4(0.,1.,0.,1.), 300, (0,0))   # create a second Cell
         self.grid[0][0].append(self.p1)
         self.grid[0][0].append(self.p2)
-        self.load_chunk((0,0))
+        self.chunks = self.get_chunk((0,0))  # FIXME this isn't working right
 
         # mol counters
         self.p1_label_v = TextNode("0")
@@ -213,12 +213,13 @@ class GameBase(ShowBase):
 
         self.taskMgr.add(self.update, "update")                     # global game update
 
+    # initialise a 9x9 grid of chunks
     def setup_grid(self):
         # generate a 3x3 array of collider arrays
         self.grid = np.array([[None] for _ in range(81)]) # u, v, contents
         self.grid.resize((9,9))
         for i in range(81):
-            self.grid[i%9,i//9] = self.load_level_random(((i%9)-1,(i//9)-1))
+            self.grid[i%9,i//9] = self.load_level_random(((i%9)-4,(i//9)-4))
         return self.grid
 
     def get_chunk(self, uv: tuple[int]):
@@ -226,17 +227,36 @@ class GameBase(ShowBase):
         gridsize = self.grid.shape
         return self.grid[uv[0]+gridsize[0]//2, uv[1]+gridsize[1]//2]
 
+    # get the cache of chunk data
+    def get_chunks(self):
+        return self.chunks
+
+    # get the list of which chunks are loaded
     def get_loaded_chunks(self):
         return self.loaded_chunks
 
+    # load data from chunk at uv into cache of chunk data
     def load_chunk(self, uv: tuple[int]):
-        if self.loaded_chunks == None:
-            self.loaded_chunks = self.get_chunk((uv[0],uv[1]))
+        for item in base.get_chunk((uv[0],uv[1])):
+            self.chunks.append(item)
+        self.loaded_chunks.append(uv)
+        #self.get_chunk((uv[0],uv[1])) = None
+
+    # load data from multiple chunks at uvs in list into cache of chunk data
+    def load_chunks(self, uvs: list[tuple[int]]):
+        for uv in uvs:
+            for item in base.get_chunk((uv[0],uv[1])):
+                self.chunks.append(item)
+            self.loaded_chunks.append(uv)
             #self.get_chunk((uv[0],uv[1])) = None
-        else:
-            for item in base.get_chunk((uv[0]+1,uv[1])):
-                self.loaded_chunks.append(item)
-            #self.get_chunk((uv[0],uv[1])) = None
+
+    # check if any of a list of uvs of chunks is not loaded. returns uvs of chunks not loaded to cache of chunk data
+    def check_loaded_chunks(self, chunks: list[tuple[int]]) -> list[tuple[int]]:
+        missing_chunks = []
+        for chunk in chunks:
+            if chunk not in self.loaded_chunks:
+                missing_chunks.append(chunk)
+        return missing_chunks
 
     # takes uv coords, not a base.grid index
     def load_level_random(self, chunk_id: tuple[int]):

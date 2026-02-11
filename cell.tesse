@@ -6,12 +6,54 @@
 //gl_PrimitiveID     // current patch
 //gl_TessCoord       // current vertex within patch
 
-void main() {
-    // specify triangle patches
-    // specify spacing
+uniform mat4 p3d_ModelViewProjectionMatrix;
 
+#pragma include "cell.common"
+//layout (triangles, fractional_odd_spacing, ccw) in;
+layout (vertices = 2) in;
+layout (vertices = 2) out;
+//layout (location = 1) in Vtx_data vtx_tesc[];
+
+patch in vec4 p_1;
+patch in vec4 p2;
+
+layout (location = 2) out Vtx_data vtx[];
+
+// by fcaruso, computeranimations.wordpress.com
+vec3 hermite(float u, vec3 p0, vec3 p1, vec3 t0, vec3 t1) {
+    float F1 = 2.*u*u*u - 3.*u*u + 1.;
+    float F2 = -2.*u*u*u + 3*u*u;
+    float F3 = u*u*u - 2.*u*u + u;
+    float F4 = u*u*u - u*u;
+
+    return F1*p0 + F2*p1 + F3*t0 + F4*t1;
+}
+
+// by ExtraGravity, enochtsang.com
+vec4 catmull_rom(float u, float v, float p0, float p1, float p_1, float p2) {
+    float b0 = (2. * u * u) - (u * u * u) - u;
+    float b1 = 2. - (5. * u * u) + (3. * u * u * u);
+    float b2 = (u) + (4. * u * u) - (3. * u * u * u);
+    float b3 = (u * u * u) - (u * u);
+    vec4 new_pos = .5 * (b0*p_1 + b1*p0 + b2*p1 + b3*p2);
+    return vec4(new_pos.x + v * .08, new_pos.y + v * .08, new_pos.z, new_pos.w);
+}
+
+void main() {
+    vec4 p0 = gl_in[0].gl_Position;
+    vec4 p1 = gl_in[1].gl_Position;
     float u = gl_TessCoord.x;
     float v = gl_TessCoord.y;
 
-    // do catmull-rom splinic interpolation
+    // do hermitic splinic interpolation
+/*    vec3 vPos0 = vec3( gl_in[0].gl_Position );
+    vec3 vPos1 = vec3( gl_in[1].gl_Position );
+    vec3 v3pos = hermite( u, vPos0, vPos1, vTan0, vTan1 );
+    vec4 pos = vec4( v3pos, 1.); */
+
+    // do catmull-rom interpolation
+    vec4 pos = catmull_rom(u,v,p0,p1)
+
+    // apply matrices 
+    gl_Position = p3d_ModelViewProjectionMatrix * pos;
 }
