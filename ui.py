@@ -6,13 +6,48 @@ from panda3d.core import (
 
 def setup_ui():
     # player mol counter
-    base.p1_label_v = TextNode("0")
-    base.p1_label_v.setTextColor(1,1,1,1)
-    base.p1_label_v.setTextScale(0.1)
-    p1_label_v_np = aspect2d.attach_new_node(base.p1_label_v)
-    p1_label_v_np.set_pos((1.3,0.,.85))
+    base.player_mols_count = TextNode("p1_mol_count")
+    base.player_mols_count.setTextColor(1,1,1,1)
+    base.player_mols_count.setTextScale(0.1)
+    base.player_mols_count.setText("0")
+    player_mols_count_np = aspect2d.attach_new_node(base.player_mols_count)
+    player_mols_count_np.set_pos((1.3,0.,.85))
+
+    base.player_hydration = TextNode("p1_hydration")
+    base.player_hydration.setTextColor(1,1,1,1)
+    base.player_hydration.setTextScale(0.1)
+    base.player_hydration.setText("0")
+    player_hydration_np = aspect2d.attach_new_node(base.player_hydration)
+    player_hydration_np.set_pos((1.1,0.,.85))
+
+    base.player_salinity = TextNode("p1_salinity")
+    base.player_salinity.setTextColor(1,1,1,1)
+    base.player_salinity.setTextScale(0.1)
+    base.player_salinity.setText("0")
+    player_salinity_np = aspect2d.attach_new_node(base.player_salinity)
+    player_salinity_np.set_pos((.9,0.,.85))
 
     # TODO player resource counters
+    base.player_carb = TextNode("p1_carb_count")
+    base.player_carb.setTextColor(1,1,0,1)
+    base.player_carb.setTextScale(0.1)
+    base.player_carb.setText("0")
+    player_carb_np = aspect2d.attach_new_node(base.player_carb)
+    player_carb_np.set_pos((-1.3,0.,.85))
+
+    base.player_oil = TextNode("p1_oil_count")
+    base.player_oil.setTextColor(0,1,0,1)
+    base.player_oil.setTextScale(0.1)
+    base.player_oil.setText("0")
+    player_oil_np = aspect2d.attach_new_node(base.player_oil)
+    player_oil_np.set_pos((-1.3,0.,.7))
+
+    base.player_amino = TextNode("p1_amino_count")
+    base.player_amino.setTextColor(1,0,1,1)
+    base.player_amino.setTextScale(0.1)
+    base.player_amino.setText("0")
+    player_amino_np = aspect2d.attach_new_node(base.player_amino)
+    player_amino_np.set_pos((-1.3,0.,.7))
 
     bar_maker = CardMaker("bars")
     bar_maker.set_frame(0.,1.,0.,.1,)
@@ -74,7 +109,7 @@ def setup_ui():
 def update(task):
     base.cam.setPos(base.p1.pos() + base.CAM_POS)                    # camera follows p1
     # print(f"Cellpos: {base.p1.pos}; cam pos: {base.cam.getPos()}")
-    base.p1_label_v.setText(str(len(base.p1.mols)))             # update UI
+    base.player_mols_count.setText(str(len(base.p1.mols)))             # update UI
     #base.p2_label_v.setText(str(len(base.p2.mols)))
     base.nrg_label_v.setText(str(base.p1.nrg)[:4]+"/"+str(base.p1.max_hp)[:2])
     base.hp_label_v.setText(str(base.p1.hp)[:4]+"/"+str(base.p1.max_nrg)[:2])

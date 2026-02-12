@@ -19,9 +19,9 @@ def ABS_DIST(a: Vec3, b: Vec3) -> float:
 
 class MOLTYPE(Enum):
     WATER = "teal.png"              # essential for metabolism                  = balance metabolism
-    SUGAR = "rose.png"             # energy sources - electron transfer agents = restore energy
+    SUGAR = "rose.png"              # energy sources - electron transfer agents = restore energy
     CARB  = "gold.png"              # energy sources - catabolic substrate      = grow cell
-    OILS  = "green.png"              # nutrition - lipids                        = heal damage
+    OILS  = "green.png"             # nutrition - lipids                        = heal damage
     AMINO = "purple.png"            # nutrition - nucleotides                   = power up cell
     SALT  = "white.png"             # salts                                     = slows energy loss
 
@@ -119,7 +119,7 @@ class Cell:
         self.radius: float   = 2.
         self.verts: int      = 12            # number of OUTER vertices (Cell requires centre)
         self.velocity        = Vec2(0.,0.)   # initial speed
-        self.colliding       = False         # flag for if Cell is colliding with something
+        #self.colliding       = False         # flag for if Cell is colliding with something
 
         print(f"Loading {self.name} VBO data...")
         # load the default Cell from file
@@ -339,14 +339,11 @@ class Cell:
                     self.add_mol(item)
                     base.get_chunk(item.uv).remove(item)
                 else:
-                    self.colliding = True
+                    #self.colliding = True
                     print(f"{self.name} colliding with {item}")
-                    # item.buffer
-                    # self.nodepath.set_shader_input("coll_buff", )
-                    # self.nodepath.set_shader_input("colliding", self.colliding)
-            else:
-                self.colliding = False
-                #self.nodepath.set_shader_input("colliding", self.colliding)
+                    # mod_buff = item.buffer.doSomethingToMakeItFit?!?
+                    # self.nodepath.set_shader_input("coll_buff", mod_buff)
+                    # self.nodepath.set_shader_input("colliding", True)
 
         self.nodepath.set_pos(self.pos() + Vec3(self.velocity*dt, 0.))
         self.nodepath.set_shader_input("model_velocity", self.velocity*dt)
@@ -354,6 +351,8 @@ class Cell:
         self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) 
 
         self.spinner += dt%360
+        
+        #self.colliding = False
         return task.cont
 
     # move the cell by its nodepath.pos
