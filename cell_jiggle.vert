@@ -7,15 +7,20 @@ layout (std430, binding = 0) buffer ssbo {
     P3d_data p3d_data[13];          //  = 64B x 13 
 };                                  // = 832B buffer
 
+layout (std430, binding = 1) buffer coll_buff {
+    vec4 position[];
+};
+
 uniform mat4 p3d_ModelViewProjectionMatrix;
 uniform float osg_DeltaFrameTime;
 
 const float EPSILON = 0.0001;               // a really small number
-const float DAMP_RATIO = .3;                // sets springyness of cell verts
+const float DAMP_RATIO = .4;                // sets springyness of cell verts
 
 uniform float radius;
 uniform vec2 model_velocity;
 //uniform vec4 col;
+uniform bool colliding;
 
 // disabled while testing tess shaders
 //out vec4 v_col;
@@ -121,7 +126,7 @@ void main() {
                       p3d_data[vtx].vel, 
                       desire_vtx, 
                       osg_DeltaFrameTime,
-                      10.);
+                    9.);
         new_pos = vec4(sho_out.xy, 0., 1.);
         // calculate model translation in world-space
         //vec2 model_pos = vec4(p3d_ModelMatrix * vec4(vtx_data[vtx].basis,0.,1.)).xy;

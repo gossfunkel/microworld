@@ -2,7 +2,8 @@ from direct.showbase.ShowBase import ShowBase
 
 from panda3d.core import (
     loadPrcFileData, GeomVertexFormat, GeomVertexData, GeomVertexWriter,
-    GeomEnums, Geom, GeomNode, NodePath, ModelRoot, BoundingBox, GeomTrifans
+    GeomEnums, Geom, GeomNode, NodePath, ModelRoot, BoundingBox, GeomTrifans,
+    ShaderBuffer
 )
 import numpy as np
 import struct
@@ -22,7 +23,7 @@ class Rock:
         # TODO define area at initialisation and conform random vertex positions to limited area
 
         # make VBO
-        vtx_data   = GeomVertexData('rock_vbo', ROCK_VTX_FORMAT, Geom.UHStatic)
+        vtx_data = GeomVertexData('rock_vbo', ROCK_VTX_FORMAT, Geom.UHStatic)
         vtx_data.set_num_rows(self.verts)
 
         # create a mesh ('Geom') from the vertices
@@ -52,7 +53,7 @@ class Rock:
             updown = 2.*(point%2)                                   # half above, half below
             vtx_writer.add_data3(np.random.uniform(-.3,.3),
                                  np.random.uniform(-.3,.3),
-                                 (1. - updown)/2.)
+                                 (1. - updown)/4.)
             col_writer.add_data4(col[0],col[1],col[2], col[3]*.5)   # reduce opacity of 3d verts
         
         prim_up   = GeomTrifans(Geom.UHStatic)
@@ -78,6 +79,11 @@ class Rock:
 
         root = ModelRoot("Rock_model_root")                         # Ensure mesh has a root for saving
         root.addChild(geom_node)
+
+        p3d_array = vtx_data.get_array_handle(0).get_data()
+        byte_data = bytearray(p3d_array)
+        
+        self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
         
         self.nodepath = NodePath(root)                              # create a new nodepath for the model
         

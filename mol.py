@@ -5,6 +5,7 @@ from panda3d.core import (
 )
 import numpy as np
 from enum import Enum
+import struct
 
 EPSILON: float = .0001              # a very small change
 TAU: float = np.pi * 2              # for calculating circles
@@ -120,7 +121,7 @@ class Cell:
         self.hp: float       = self.max_hp   # current health
         self.max_nrg: float  = 10.           # maximum energy
         self.nrg: float      = self.max_nrg  # current energy
-        self.nrg_loss_rate   = .001          # rate of energy loss BALANCE
+        self.nrg_loss_rate   = .01           # rate of energy loss BALANCE
         self.speed: float    = 1.            # amount to add to position per frame per dt
         self.salinity: float = 0.            # current salt level
 
@@ -140,7 +141,12 @@ class Cell:
         #custom_array = vtx_data.get_array_handle(1).get_data()
         byte_data = bytearray(p3d_array)
         #byte_data.extend(custom_array)
+
         self.buffer = ShaderBuffer("ssbo", bytes(byte_data), GeomEnums.UHDynamic)
+        # vals = bytearray()
+        # for _ in range(13):
+        #     vals.extend(struct.pack('4f', 0., 0., 0., 0.))
+        # self.coll_buff = ShaderBuffer("coll_buff", bytes(vals), GeomEnums.UHDynamic)
 
         self.nodepath = base.render.attach_new_node(node)
         # store position in the node 
@@ -151,9 +157,11 @@ class Cell:
         # activate the jiggle shader on the Cell
         self.nodepath.set_shader(Shader.load(Shader.SL_GLSL, vertex="cell_jiggle.vert", fragment="default_shader.frag"))
         self.nodepath.set_shader_input("ssbo", self.buffer)
+        #self.nodepath.set_shader_input("coll_buff", self.coll_buff)
         self.nodepath.set_shader_input("radius", self.radius)
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("col", self.col)
+        #self.nodepath.set_shader_input("colliding", self.colliding)
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
@@ -239,7 +247,12 @@ class Cell:
         #vtx_view = memoryview(self.nodepath.node().get_vertex_data().modify_array(0)).cast('B').cast('f')
         #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
-        self.nrg -= self.nrg_loss_rate                              # tick energy loss
+        dt = globalClock.get_dt()
+
+        if (self.salinity > 4.):
+            self.hp -= (self.salinity-4.)*.01*dt                       # damage from salting out BALANCE
+
+        self.nrg -= self.nrg_loss_rate*dt                              # tick energy loss
 
         if (self.nrg <= 0.) or (self.hp <= 0.): self.die()          # check if cell should die
 
@@ -284,32 +297,34 @@ class Cell:
                     base.get_chunk(item.uv).remove(item)
                 else:
                     self.colliding = True
-                    # self.nodepath.setshaderinput("colliding", self.colliding)
+                    print(f"{self.name} colliding with {item}")
+                    # item.buffer
+                    # self.nodepath.set_shader_input("coll_buff", )
+                    # self.nodepath.set_shader_input("colliding", self.colliding)
             else:
                 self.colliding = False
-                # self.nodepath.setshaderinput("colliding", self.colliding)
+                #self.nodepath.set_shader_input("colliding", self.colliding)
 
-        self.nodepath.set_pos(self.pos() + Vec3(self.velocity, 0.))
-        self.nodepath.set_shader_input("model_velocity", self.velocity)
+        self.nodepath.set_pos(self.pos() + Vec3(self.velocity*dt, 0.))
+        self.nodepath.set_shader_input("model_velocity", self.velocity*dt)
         # cell experiences friction, causing velocity to naturally decrease
         self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) 
 
-        self.spinner += (globalClock.getDt())%360
+        self.spinner += dt%360
         return task.cont
 
     # move the cell by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
-        speed = self.speed * globalClock.getDt()
         match direction:
             case "left":                                            # go left
-                self.velocity -=  Vec2(speed,0.)
+                self.velocity -=  Vec2(self.speed,0.)
             case "right":                                           # go right
-                self.velocity +=  Vec2(speed,0.)
+                self.velocity +=  Vec2(self.speed,0.)
             case "fwd":                                             # go forwards
-                self.velocity +=  Vec2(0.,speed)
+                self.velocity +=  Vec2(0.,self.speed)
             case "back":                                            # ...you guessed it
-                self.velocity -=  Vec2(0.,speed)
+                self.velocity -=  Vec2(0.,self.speed)
             case _: 
                 print("Move direction not recognised!")
 
