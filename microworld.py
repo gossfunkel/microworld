@@ -294,8 +294,8 @@ class GameBase(ShowBase):
     def update(self, task):
         self.cam.setPos(self.p1.pos() + self.CAM_POS)                    # camera follows p1
         # print(f"Cellpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
-        self.p1_label_v.setText(str(self.p1.num_mols))             # update UI
-        #self.p2_label_v.setText(str(self.p2.num_mols))
+        self.p1_label_v.setText(str(len(self.p1.mols)))             # update UI
+        #self.p2_label_v.setText(str(len(self.p2.mols)))
         self.nrg_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
         self.hp_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
         self.nrg_bar.set_scale(self.p1.nrg/self.p1.max_nrg,1.,1.)

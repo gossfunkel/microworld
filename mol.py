@@ -68,7 +68,7 @@ class Mol:
     def fly_to_target(self, target):
         self.orbiting = False
         # abs_dist = ABS_DIST(self.nodepath.get_pos(),target)
-        ratio = (self.index+1) / self.cell.num_mols
+        ratio = (self.index+1) / len(self.cell.mols)
         elevation = self.radius*1.2 + .04 * np.sin((target.spinner + .5) * ratio)   # this works if dt is in seconds (doubt, hahaha)
         move_int = self.nodepath.posInterval(1., target.pos() + Vec3(0,0,elevation), fluid=1)
         Sequence(
@@ -80,8 +80,8 @@ class Mol:
     def update(self, task):
         pos = self.nodepath.get_pos()                               # current mol position
         if (self.orbiting):
-            # each mol gets a root of unity of num_mols (arrange them in an even circle)
-            ratio = (self.index + 1)/ self.cell.num_mols
+            # each mol gets a root of unity of len(mols) (arrange them in an even circle)
+            ratio = (self.index + 1)/ len(self.cell.mols)
             self.angle = TAU * ratio + self.cell.spinner
             # bob up and down
             elevation = self.radius*1.2 + .04 * np.sin(self.angle)
@@ -97,6 +97,7 @@ class Mol:
         return task.cont
 
     def consume(self):
+        self.orbiting = False                                       # ensure orbit doesn't run while dying
         self.nodepath.remove_node(Thread.current_thread)
         self.sfx.play()                                             # play a little consume brrrrp 
         taskMgr.remove(self.task_name)
@@ -171,7 +172,6 @@ class Cell:
         self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
         self.mols          = []                                     # array for mols on Cell
         self.spinner: float = 0                                     # this tells mols on this Cell how to rotate neatly
-        self.num_mols: int = len(self.mols)                         # to help with angle calculations
 
         base.taskMgr.add(self.update, str(name)+"-update")
 
@@ -194,36 +194,35 @@ class Cell:
                 self.nrg -= 1.
                 match mol:
                     case MOLTYPE.FRNA:
-                        self.mols.append(Mol(MOLTYPE.FRNA, self.name+"-FRNAmol-"+str(self.num_mols), 
-                                               self.uv, cell=self, index=self.num_mols))
-                        self.num_mols += 1
+                        self.mols.append(Mol(MOLTYPE.FRNA, self.name+"-FRNAmol-"+str( len(self.mols)), 
+                                               self.uv, cell=self, index=len(self.mols)))
                     case MOLTYPE.FOOD:
-                        self.mols.append(Mol(MOLTYPE.FOOD, self.name+"-FOODmol-"+str(self.num_mols), 
-                                               self.uv, cell=self, index=self.num_mols))
-                        self.num_mols += 1
+                        self.mols.append(Mol(MOLTYPE.FOOD, self.name+"-FOODmol-"+str( len(self.mols)), 
+                                               self.uv, cell=self, index= len(self.mols)))
         else:
             print("DANGER: Insufficient energy!")
 
     # change currently selected mol TODO show self.selected somehow (ideally highlighting)
     def select_mol(self, direction: str):
         if direction == "left":
-            self.selected = (self.selected-1)%max(1,self.num_mols)
+            self.selected = (self.selected-1)%max(1, len(self.mols))
         elif direction == "right":
-            self.selected = (self.selected+1)%max(1,self.num_mols)
+            self.selected = (self.selected+1)%max(1, len(self.mols))
         else:
             print(f"Incorrect input passed to select_mol: {direction}. Pass 'left' or 'right'!")
 
     def consume_mol(self, mol=None):
         if isinstance(mol,type(None)):                              # consume the first mol in the buffer
             if len(self.mols) > 0:
-                mol = self.mols[0]
+                mol = self.mols[self.selected]
                 mol.consume()
-                del self.mols[0]
-                self.num_mols -= 1
+                del self.mols[self.selected]
+                if self.selected > len(self.mols)-1:
+                    self.selected = 0
             else:
                 print("No mols to consume!")                        # consumption failed, return
                 return;
-        else:
+        else:                                                       # consume the mol that was passed
             mol.consume()
             del mol
 
@@ -249,10 +248,9 @@ class Cell:
         #print(f"adding mol to {self.name}")
         self.mols.append(mol)                                       # add mol to mols
         mol.cell = self                                             # change mol references to self
-        mol.index = self.num_mols                                   # n.b. this is only incremented at the end of method
+        mol.index = len(self.mols)-1
         mol.set_orbiting_true()                                     # make mol orbit
         base.sfx.bongs[self.bong].play()                            # make a jubilant bong
-        self.num_mols += 1                                          # incremement mol count
 
     def update(self, task):
         # processor-killing debug:
