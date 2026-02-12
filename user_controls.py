@@ -70,6 +70,7 @@ def bind_cell(cell):
     base.accept("r", cell.make_mol, [mol.MOLTYPE.AMINO])            # make an amino mol from energy (r for rna)
     base.accept("f", cell.make_mol, [mol.MOLTYPE.CARB])             # make an carb mol from energy (f for food)
     base.accept("g", cell.grow)                                     # grow cell (if affordable)
+    base.accept("h", cell.heal)                                     # heal cell (if affordable)
     #base.accept("m", cell.toggle_metabolism)                        # switch carb breakdown on/off
     base.accept("j", cell.select_mol, ['left'])
     base.accept("k", cell.select_mol, ['right'])

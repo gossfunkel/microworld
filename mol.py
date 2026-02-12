@@ -205,6 +205,17 @@ class Cell:
         else:
             print("Not enough resources (carbs or oils) to grow!")
 
+    def heal(self):
+        if self.hp < self.max_hp:
+            if (self.oils >= 1):
+                self.oils -= 1
+                # no overhealing - just top up health to maximum health at most
+                self.hp = min(self.max_hp, self.hp + 1.)
+            else:
+                print("Not enough resources (oils) to heal!")
+        else:
+            print("Already at full hp!")
+
     def make_mol(self, *mols: MOLTYPE):
         if self.nrg > 1.:
             for mol in mols:
@@ -259,8 +270,6 @@ class Cell:
                 self.carbs += 1                                     # carbs are stored as a resource
             case MOLTYPE.OILS:
                 self.oils += 1                                      # oils are stored as a resource
-                # no overhealing - just top up health to maximum health at most
-                self.hp = min(self.max_hp, self.hp + 1.)
             case MOLTYPE.AMINO:
                 print("Power up!")
                 self.aminos += 1                                    # aminos are stored as a resource

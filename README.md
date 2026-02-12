@@ -14,22 +14,24 @@ of course, growing!
 - Use the arrow keys to get around. 
 - Press `f` to consume 1 unit of energy to make a FOOD mol. 
 - Press `r` to consume 1 unit of energy to make an FRNA mol.
-- Use `j` and `k` to select a gathered mol
-- Press `Spacebar` to consume the selected mol
+- Press `g` to use 1 carb and 1 oil to grow your cell.
+- Press `h` to rapidly heal your cell for 1 oil.
+- Use `j` and `k` to select a gathered mol.
+- Press `Spacebar` to consume the selected mol.
 
 
 The different ball types have different effects:
+- WATER: maintain hydration levels to prevent health loss and enable optimal energy generation
+- SALT: reduce rate of energy loss over time. Caution: high salt levels are bad for your health!
 - SUGAR: quick energy
 - CARBS: metabolic energy source- maintain supplies so your metabolism can keep you alive
-- OILS: gain health immediately, or build your cell defenses- though this comes with added energy costs!
-- WATER: maintain hydration levels to prevent health loss and enable optimal energy generation
+- OILS: heal or build your cell defenses- though this comes with added energy costs!
 - AMINO: make proteins, growing larger and more powerful 
-- SALT: reduce rate of energy loss over time. Caution: high salt levels are bad for your health!
 
 
 ### TODO LIST:
 - finish implementing a tessellation shader to smooth the cell outlines
-- polish resources; sort HUD with display for all resources, make resources fade over time after consumption, rework FRNA into AMINOS, MANA into SUGAR, FOOD into CARBS, HEAL into OILS, and add WATER. 
+- polish resources; sort HUD with display for all resources, make resources fade over time after consumption
 - figure out how to implement collisions between cells and other cells / surfaces
 - add more inert terrain
 - add genes (upgrades):
