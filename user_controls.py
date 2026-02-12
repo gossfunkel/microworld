@@ -69,6 +69,8 @@ def bind_cell(cell):
     # game control buttons
     base.accept("r", cell.make_mol, [mol.MOLTYPE.FRNA])             # make an frna mol from energy
     base.accept("f", cell.make_mol, [mol.MOLTYPE.FOOD])             # make an frna mol from energy
+    base.accept("j", cell.select_mol, ['left'])
+    base.accept("k", cell.select_mol, ['right'])
     base.accept("space", cell.consume_mol)                          # consume a mol
     base.accept("escape", base.userExit)                            # quickly quit the game
 

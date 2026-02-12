@@ -124,6 +124,10 @@ class Cell:
         self.nrg_loss_rate   = .01           # rate of energy loss BALANCE
         self.speed: float    = 1.            # amount to add to position per frame per dt
         self.salinity: float = 0.            # current salt level
+        self.hydration: float = 5.           # current water level
+        self.dry_rate: float = .01           # rate of water loss
+        self.aminos: int     = 0             # number of aminos 
+        self.selected: int   = 0             # currently selected ball
 
         print(f"Loading {self.name} VBO data...")
         # load the default Cell from file
@@ -199,6 +203,15 @@ class Cell:
                         self.num_mols += 1
         else:
             print("DANGER: Insufficient energy!")
+
+    # change currently selected mol TODO show self.selected somehow (ideally highlighting)
+    def select_mol(self, direction: str):
+        if direction == "left":
+            self.selected = (self.selected-1)%max(1,self.num_mols)
+        elif direction == "right":
+            self.selected = (self.selected+1)%max(1,self.num_mols)
+        else:
+            print(f"Incorrect input passed to select_mol: {direction}. Pass 'left' or 'right'!")
 
     def consume_mol(self, mol=None):
         if isinstance(mol,type(None)):                              # consume the first mol in the buffer
