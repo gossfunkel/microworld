@@ -1,4 +1,3 @@
-
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
     Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread
@@ -6,6 +5,8 @@ from panda3d.core import (
 import numpy as np
 from enum import Enum
 import struct
+
+import user_controls as controls
 
 EPSILON: float = .0001              # a very small change
 TAU: float = np.pi * 2              # for calculating circles
@@ -16,11 +17,12 @@ def ABS_DIST(a: Vec3, b: Vec3) -> float:
                    (a.z-b.z)*(a.z-b.z))
 
 class MOLTYPE(Enum):
-    MANA = "teal.png"               # energy sources - electron transfer agents = restore energy
-    FOOD = "gold.png"               # energy sources - catabolic substrate      = grow cell
-    HEAL = "green.png"              # nutrition - phospholipids                 = heal damage
-    FRNA = "purple.png"             # nutrition - nucleotides                   = power up cell
-    SALT = "white65.png"            # salts                                     = slows energy loss
+    WATER = "teal.png"              # essential for metabolism                  = balance metabolism
+    SUGAR = "rose.png"             # energy sources - electron transfer agents = restore energy
+    CARB  = "gold.png"              # energy sources - catabolic substrate      = grow cell
+    OILS  = "green.png"              # nutrition - lipids                        = heal damage
+    AMINO = "purple.png"            # nutrition - nucleotides                   = power up cell
+    SALT  = "white.png"             # salts                                     = slows energy loss
 
 # floating resource orbs. can bind to cells
 class Mol:
@@ -118,18 +120,6 @@ class Cell:
         self.velocity        = Vec2(0.,0.)   # initial speed
         self.colliding       = False         # flag for if Cell is colliding with something
 
-        self.max_hp: float   = 10.           # maximum health
-        self.hp: float       = self.max_hp   # current health
-        self.max_nrg: float  = 10.           # maximum energy
-        self.nrg: float      = self.max_nrg  # current energy
-        self.nrg_loss_rate   = .01           # rate of energy loss BALANCE
-        self.speed: float    = 1.            # amount to add to position per frame per dt
-        self.salinity: float = 0.            # current salt level
-        self.hydration: float = 5.           # current water level
-        self.dry_rate: float = .01           # rate of water loss
-        self.aminos: int     = 0             # number of aminos 
-        self.selected: int   = 0             # currently selected ball
-
         print(f"Loading {self.name} VBO data...")
         # load the default Cell from file
         loaded_file = BamFile()
@@ -173,6 +163,25 @@ class Cell:
         self.mols          = []                                     # array for mols on Cell
         self.spinner: float = 0                                     # this tells mols on this Cell how to rotate neatly
 
+        # stats BALANCE
+        self.max_hp: float   = 10.           # maximum health
+        self.hp: float       = self.max_hp   # current health
+        self.max_nrg: float  = 10.           # maximum energy
+        self.nrg: float      = self.max_nrg  # current energy
+
+        self.salinity: float = 0.            # current SALT level
+        self.hydration: float = 5.           # current WATER level
+        self.carbs: int      = 2             # quantity of CARBS in cell
+        self.oils: int       = 0             # quantity of FATS in cell
+        self.aminos: int     = 0             # quantity of AMINOS in cell
+
+        self.speed: float    = 1.            # amount to add to position per frame per dt
+        self.nrg_loss_rate   = .01           # rate of energy loss per second
+        self.dry_rate: float = .01           # rate of water loss per second
+        self.carb_digest_time: float = 5.    # seconds to digest a carb into energy
+
+        self.selected: int   = 0             # currently selected ball
+
         base.taskMgr.add(self.update, str(name)+"-update")
 
         print(f"== Cell {name} created!")
@@ -183,21 +192,24 @@ class Cell:
 
     def grow(self):
         # TODO zoom camera out when p1 Cell gets significantly bigger
+        rad_pregrowth = self.radius
         self.max_hp += 1.                                           # increase maximum health
         self.radius *= 1.1                                          # make the Cell bigger
         self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
         self.nodepath.set_shader_input("radius", self.radius)       # update the shader
+        if int(rad_pregrowth) < int(self.radius):
+            controls.zoom_out()
 
     def make_mol(self, *mols: MOLTYPE):
         if self.nrg > 1.:
             for mol in mols:
                 self.nrg -= 1.
                 match mol:
-                    case MOLTYPE.FRNA:
-                        self.mols.append(Mol(MOLTYPE.FRNA, self.name+"-FRNAmol-"+str( len(self.mols)), 
+                    case MOLTYPE.AMINO:
+                        self.mols.append(Mol(MOLTYPE.AMINO, self.name+"-AMINOmol-"+str( len(self.mols)), 
                                                self.uv, cell=self, index=len(self.mols)))
-                    case MOLTYPE.FOOD:
-                        self.mols.append(Mol(MOLTYPE.FOOD, self.name+"-FOODmol-"+str( len(self.mols)), 
+                    case MOLTYPE.CARB:
+                        self.mols.append(Mol(MOLTYPE.CARB, self.name+"-CARBmol-"+str( len(self.mols)), 
                                                self.uv, cell=self, index= len(self.mols)))
         else:
             print("DANGER: Insufficient energy!")
@@ -227,19 +239,19 @@ class Cell:
             del mol
 
         match mol.type:                                             # activate the appropriate effect
-            case MOLTYPE.FOOD:
+            case MOLTYPE.CARB:
                 self.grow()
                 # TODO add vertex
                 # TODO update VBO on adding/removing verts
-            case MOLTYPE.HEAL:
+            case MOLTYPE.OILS:                                      # TODO make these abilities with costs
                 # no overhealing - just top up health to maximum health at most
                 self.hp = min(self.max_hp, self.hp + 1.)
-            case MOLTYPE.MANA:
+            case MOLTYPE.SUGAR:
                 self.nrg = min(self.max_nrg, self.nrg + 1.)
             case MOLTYPE.SALT:
                 self.salinity += 1.                                 # TODO salinity moves energy loss to hp loss
                 self.nrg_loss_rate *= .75                           # reduce energy loss rate by a quarter BALANCE
-            case MOLTYPE.FRNA:
+            case MOLTYPE.AMINO:
                 print("Power up!")
                 # TODO metabolic objectives; growing utilities. Menu or progression? Unlocks?
                 self.speed *= 1.5                                   # increase cell speed

@@ -67,8 +67,8 @@ def bind_cell(cell):
     base.accept("wheel_down", zoom_out)
     
     # game control buttons
-    base.accept("r", cell.make_mol, [mol.MOLTYPE.FRNA])             # make an frna mol from energy
-    base.accept("f", cell.make_mol, [mol.MOLTYPE.FOOD])             # make an frna mol from energy
+    base.accept("r", cell.make_mol, [mol.MOLTYPE.AMINO])            # make an amino mol from energy (r for rna)
+    base.accept("f", cell.make_mol, [mol.MOLTYPE.CARB])             # make an carb mol from energy (f for food)
     base.accept("j", cell.select_mol, ['left'])
     base.accept("k", cell.select_mol, ['right'])
     base.accept("space", cell.consume_mol)                          # consume a mol

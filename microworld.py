@@ -1,4 +1,7 @@
-from direct.showbase.ShowBase import ShowBase
+import struct                                                       #python imports
+import copy
+
+from direct.showbase.ShowBase import ShowBase                       # library imports
 #from direct.filter.CommonFilters import CommonFilters
 from direct.interval.IntervalGlobal import *
 from panda3d.core import (
@@ -7,13 +10,13 @@ from panda3d.core import (
 )
 import numpy as np
 from scipy.signal import chirp
-import struct
-import copy
-from rock import Rock
+
+from rock import Rock                                               # game imports
 import mol
+import ui
 import user_controls as controls
 
-TAU: float = np.pi * 2              # for calculating circles
+TAU: float = np.pi * 2                                              # for calculating circles
 
 # the Cells are supposed to be little microbial cell guys
 # the floating mols can be hp (heal), mana (survival), protein (upgrade), fats (grow), salts (constitution)
@@ -21,6 +24,7 @@ TAU: float = np.pi * 2              # for calculating circles
 # TODO: spatial partitioning. This ^ and the mol-collection would benefit a lot
 # verticality; since we can only move on a plane, the z-dim could be used to make things inaccessible?
 
+CHUNK_SIZE = 30.                                                    # constants
 CONFIG: str = """
 gl-version 4 3
 gl-debug true
@@ -38,7 +42,6 @@ framebuffer-srgb true
 """
 loadPrcFileData("", CONFIG)
 
-CHUNK_SIZE = 30.
 
 # container for sound effects
 class SoundFX:
@@ -88,6 +91,7 @@ class SoundFX:
         self.brrps.append(base.loader.loadSfx(brrp_audio_buff))                 # load buffer to brrps list
         return len(self.brrps)-1                                                # return index of brrp
 
+# Main game class and loop manager
 class GameBase(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
@@ -115,69 +119,11 @@ class GameBase(ShowBase):
         self.chunks = []
         self.load_chunk((0,0))
 
-        # mol counter
-        self.p1_label_v = TextNode("0")
-        self.p1_label_v.setTextColor(1,1,1,1)
-        self.p1_label_v.setTextScale(0.1)
-        p1_label_v_np = aspect2d.attach_new_node(self.p1_label_v)
-        p1_label_v_np.set_pos((1.3,0.,.85))
-
-        bar_maker = CardMaker("bars")
-        bar_maker.set_frame(0.,1.,0.,.1,)
-
-        #    render   = incoming_col * A - framebuffer_col * B
-        bar_text_cba  = ColorBlendAttrib.make(ColorBlendAttrib.M_subtract, 
-                                              ColorBlendAttrib.O_one, 
-                                              ColorBlendAttrib.O_one)
-        bar_text_trat = TransparencyAttrib.make(TransparencyAttrib.M_binary)
-
-        # energy HUD
-        self.nrg_bar = aspect2d.attach_new_node(bar_maker.generate())
-        self.nrg_bar.set_pos((-1.4,0.,-.9))
-        self.nrg_bar.set_texture(loader.loadTexture(mol.MOLTYPE.MANA.value))
-        
-        self.nrg_label = TextNode("nrg_label")
-        self.nrg_label.set_attrib(bar_text_trat, 1000)
-        self.nrg_label.setTextColor(.5,1.,1.,.8)
-        self.nrg_label.setTextScale(0.078)
-        self.nrg_label.setText("ENERGY:")
-        self.nrg_label.setAttrib(bar_text_cba)
-        nrg_label_np = aspect2d.attach_new_node(self.nrg_label)
-        nrg_label_np.set_pos((-1.35,0.,-.872))
-        # energy HUD value output
-        self.nrg_label_v = TextNode("0")
-        self.nrg_label_v.set_attrib(bar_text_trat, 1000)
-        self.nrg_label_v.setTextColor(.6,1.,1.,.8)
-        self.nrg_label_v.setTextScale(0.08)
-        self.nrg_label_v.setAttrib(bar_text_cba)
-        nrg_label_v_np = aspect2d.attach_new_node(self.nrg_label_v)
-        nrg_label_v_np.set_pos((-.97,0.,-.87))
-
-        # health HUD
-        self.hp_bar = aspect2d.attach_new_node(bar_maker.generate())
-        self.hp_bar.set_pos((-1.4,0.,-.75))
-        self.hp_bar.set_texture(loader.loadTexture(mol.MOLTYPE.HEAL.value))
-
-        self.hp_label = TextNode("hp_label")
-        self.hp_label.set_attrib(bar_text_trat, 1000)
-        self.hp_label.setTextColor(.5,1.,.5,.8)
-        self.hp_label.setTextScale(0.078)
-        self.hp_label.setText("HEALTH:")
-        self.hp_label.setAttrib(bar_text_cba)
-        hp_label_np = aspect2d.attach_new_node(self.hp_label)
-        hp_label_np.set_pos((-1.35,0.,-.722))
-        # health HUD value output
-        self.hp_label_v = TextNode("0")
-        self.hp_label_v.set_attrib(bar_text_trat, 1000)
-        self.hp_label_v.setTextColor(.6,1.,.6,.8)
-        self.hp_label_v.setTextScale(0.08)
-        self.hp_label_v.setAttrib(bar_text_cba)
-        hp_label_v_np = aspect2d.attach_new_node(self.hp_label_v)
-        hp_label_v_np.set_pos((-.97,0.,-.72))
+        ui.setup_ui()
 
         controls.bind_cell(self.p1)
 
-        self.taskMgr.add(self.update, "update")                     # global game update
+        self.taskMgr.add(ui.update, "update")                       # global game update
 
     # initialise a 9x9 grid of chunks
     def setup_grid(self):
@@ -240,13 +186,13 @@ class GameBase(ShowBase):
 
         # position of the CENTRE of the chunk
         gridpos = Vec3(chunk_id[0]*CHUNK_SIZE,chunk_id[1]*CHUNK_SIZE,0.)
-        for _ in range(np.random.randint(1,4)):
-            # spawn health mols
-            hp_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+        for _ in range(np.random.randint(4,8)):
+            # spawn water mols
+            water_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               0) + gridpos
-            chunk.append(mol.Mol(mol.MOLTYPE.HEAL, f"mol-{chunk_id}-{len(chunk)}", 
-                                      chunk_id, pos=hp_mol_pos))
+            chunk.append(mol.Mol(mol.MOLTYPE.WATER, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=water_mol_pos))
         for _ in range(np.random.randint(1,6)):
             # spawn salt mols
             salt_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
@@ -254,29 +200,36 @@ class GameBase(ShowBase):
                               0) + gridpos
             chunk.append(mol.Mol(mol.MOLTYPE.SALT, f"mol-{chunk_id}-{len(chunk)}", 
                                       chunk_id, pos=salt_mol_pos))
-        mana_mol_sfx = base.sfx.add_brrp(2200)
-        for _ in range(np.random.randint(2,8)):
+        sugar_mol_sfx = base.sfx.add_brrp(2200)
+        for _ in range(np.random.randint(2,5)):
             # spawn mana mols
-            mana_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+            sugar_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               0) + gridpos
-            chunk.append(mol.Mol(mol.MOLTYPE.MANA, f"mol-{chunk_id}-{len(chunk)}", 
-                                      chunk_id, pos=mana_mol_pos, sfx=mana_mol_sfx))
-        for _ in range(np.random.randint(0,1)):
-            # spawn protein mols
-            frna_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
-                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
-                              0) + gridpos
-            chunk.append(mol.Mol(mol.MOLTYPE.FRNA, f"mol-{chunk_id}-{len(chunk)}", 
-                                      chunk_id, pos=frna_mol_pos))
+            chunk.append(mol.Mol(mol.MOLTYPE.SUGAR, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=sugar_mol_pos, sfx=sugar_mol_sfx))
         for _ in range(np.random.randint(0,2)):
             # spawn carb mols
-            food_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+            carb_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               0) + gridpos
-            chunk.append(mol.Mol(mol.MOLTYPE.FOOD, f"mol-{chunk_id}-{len(chunk)}", 
-                                      chunk_id, pos=food_mol_pos))
-        for _ in range(np.random.randint(1,4)):
+            chunk.append(mol.Mol(mol.MOLTYPE.CARB, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=carb_mol_pos))
+        for _ in range(np.random.randint(0,2)):
+            # spawn health mols
+            oils_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.OILS, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=oils_mol_pos))
+        for _ in range(np.random.randint(0,1)):
+            # spawn protein mols
+            amino_mol_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
+                              0) + gridpos
+            chunk.append(mol.Mol(mol.MOLTYPE.AMINO, f"mol-{chunk_id}-{len(chunk)}", 
+                                      chunk_id, pos=amino_mol_pos))
+        for _ in range(np.random.randint(1,3)):
             # spawn some rocks
             rock_pos = Vec3(np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
                               np.random.uniform(-CHUNK_SIZE,CHUNK_SIZE),
@@ -290,17 +243,6 @@ class GameBase(ShowBase):
         for rock in rocks:
             chunk.append(rock)
         return chunk
-
-    def update(self, task):
-        self.cam.setPos(self.p1.pos() + self.CAM_POS)                    # camera follows p1
-        # print(f"Cellpos: {self.p1.pos}; cam pos: {self.cam.getPos()}")
-        self.p1_label_v.setText(str(len(self.p1.mols)))             # update UI
-        #self.p2_label_v.setText(str(len(self.p2.mols)))
-        self.nrg_label_v.setText(str(self.p1.nrg)[:4]+"/"+str(self.p1.max_hp)[:2])
-        self.hp_label_v.setText(str(self.p1.hp)[:4]+"/"+str(self.p1.max_nrg)[:2])
-        self.nrg_bar.set_scale(self.p1.nrg/self.p1.max_nrg,1.,1.)
-        self.hp_bar.set_scale(self.p1.hp/self.p1.max_hp,1.,1.)
-        return task.cont
 
     def game_over(self, msg: str = None):
         # TODO show game over screen
