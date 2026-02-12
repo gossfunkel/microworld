@@ -5,6 +5,7 @@ from panda3d.core import (
 import numpy as np
 from enum import Enum
 import struct
+import copy
 
 import user_controls as controls
 
@@ -191,14 +192,18 @@ class Cell:
         return self.nodepath.get_pos()
 
     def grow(self):
-        # TODO zoom camera out when p1 Cell gets significantly bigger
-        rad_pregrowth = self.radius
-        self.max_hp += 1.                                           # increase maximum health
-        self.radius *= 1.1                                          # make the Cell bigger
-        self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
-        self.nodepath.set_shader_input("radius", self.radius)       # update the shader
-        if int(rad_pregrowth) < int(self.radius):
-            controls.zoom_out()
+        if (self.carbs >= 1) and (self.oils >= 1):                      # growing costs 1 carb and 1 oil
+            self.carbs -= 1
+            self.oils  -= 1
+            rad_pregrowth = self.radius
+            self.max_hp += 1.                                           # increase maximum health
+            self.radius *= 1.1                                          # make the Cell bigger
+            self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
+            self.nodepath.set_shader_input("radius", self.radius)       # update the shader
+            if int(rad_pregrowth) < int(self.radius):
+                controls.zoom_out()
+        else:
+            print("Not enough resources (carbs or oils) to grow!")
 
     def make_mol(self, *mols: MOLTYPE):
         if self.nrg > 1.:
@@ -212,7 +217,7 @@ class Cell:
                         self.mols.append(Mol(MOLTYPE.CARB, self.name+"-CARBmol-"+str( len(self.mols)), 
                                                self.uv, cell=self, index= len(self.mols)))
         else:
-            print("DANGER: Insufficient energy!")
+            print("DANGER: Insufficient energy to produce mol!")
 
     # change currently selected mol TODO show self.selected somehow (ideally highlighting)
     def select_mol(self, direction: str):
@@ -227,6 +232,7 @@ class Cell:
         if isinstance(mol,type(None)):                              # consume the first mol in the buffer
             if len(self.mols) > 0:
                 mol = self.mols[self.selected]
+                mol_type = copy.deepcopy(mol.type)                  # copy mol.type to prevent reference
                 mol.consume()
                 del self.mols[self.selected]
                 if self.selected > len(self.mols)-1:
@@ -235,24 +241,29 @@ class Cell:
                 print("No mols to consume!")                        # consumption failed, return
                 return;
         else:                                                       # consume the mol that was passed
+            mol_type = copy.deepcopy(mol.type)                      # copy mol.type to prevent reference
             mol.consume()
             del mol
 
-        match mol.type:                                             # activate the appropriate effect
-            case MOLTYPE.CARB:
-                self.grow()
-                # TODO add vertex
-                # TODO update VBO on adding/removing verts
-            case MOLTYPE.OILS:                                      # TODO make these abilities with costs
-                # no overhealing - just top up health to maximum health at most
-                self.hp = min(self.max_hp, self.hp + 1.)
-            case MOLTYPE.SUGAR:
-                self.nrg = min(self.max_nrg, self.nrg + 1.)
+        match mol_type:                                             # activate the appropriate effect
+            case MOLTYPE.WATER:
+                self.hydration += 1.                                # hydration station! store water
+                self.salinity -= .25                                # water reduces salinity
             case MOLTYPE.SALT:
                 self.salinity += 1.                                 # TODO salinity moves energy loss to hp loss
                 self.nrg_loss_rate *= .75                           # reduce energy loss rate by a quarter BALANCE
+                self.dry_rate *= 1.1                                # salt dehydrates you hahaha
+            case MOLTYPE.SUGAR:
+                self.nrg = min(self.max_nrg, self.nrg + 1.)         # sugar is consumed for immediate energy
+            case MOLTYPE.CARB:
+                self.carbs += 1                                     # carbs are stored as a resource
+            case MOLTYPE.OILS:
+                self.oils += 1                                      # oils are stored as a resource
+                # no overhealing - just top up health to maximum health at most
+                self.hp = min(self.max_hp, self.hp + 1.)
             case MOLTYPE.AMINO:
                 print("Power up!")
+                self.aminos += 1                                    # aminos are stored as a resource
                 # TODO metabolic objectives; growing utilities. Menu or progression? Unlocks?
                 self.speed *= 1.5                                   # increase cell speed
 
