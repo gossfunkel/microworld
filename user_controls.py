@@ -4,7 +4,7 @@ from panda3d.core import (
 import time
 import mol
 
-CAM_POS: Vec3 = Vec3(0,-7,2)                                        # initial camera position at game load
+CAM_POS: Vec3 = Vec3(0,-6,2)                                        # initial camera position at game load
 
 def zoom_in():
     current_fov = base.cam.node().getLens().get_fov()
