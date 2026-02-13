@@ -72,7 +72,7 @@ def bind_cell(cell):
     base.accept("g", cell.grow)                                     # grow cell (if affordable)
     base.accept("h", cell.heal)                                     # heal cell (if affordable)
     #base.accept("b", cell.boost)                                    # give cell speed boost (if affordable)
-    #base.accept("m", cell.toggle_metabolism)                       # switch carb breakdown on/off
+    base.accept("m", cell.base_metabolism.toggle)                        # switch basic carb breakdown on/off
     base.accept("j", cell.select_mol, ['left'])
     base.accept("k", cell.select_mol, ['right'])
     base.accept("space", cell.consume_mol)                          # consume a mol

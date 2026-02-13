@@ -111,6 +111,7 @@ class Mol:
 # handler class for a sequence that 'produces' one resource from another
 class Metabolism:
     def __init__(self, cell, res_in, qty_in, res_out, qty_out, max_out, time):
+        # TODO metabolism visual display
         self.cell         = cell                                    # owner of this metabolism
         self.in_type      = type(res_in[0])
         self.res_in       = res_in                                  # pointer to cell's resource counter - input
@@ -126,35 +127,45 @@ class Metabolism:
             Wait(self.time[0]),
             Func(self.do_exchange)
         )
+
+        self.paused       = False                                   # allows manually switching the metabolism on and off
         base.taskMgr.add(self.update)
         self.seq.loop()
 
     def update(self, task):
         # FIXME jams once it hits the limit the first time
-        if (self.res_in[0] <= self.qty_in):
-            self.int_pauser()
+        if not self.paused:
+            if (self.res_in[0] <= self.qty_in):
+                self.pause()
+            else:
+                self.resume()
         else:
-            self.int_resumer()
+            self.pause()
         return task.cont
 
-    def int_pauser(self):
+    def toggle(self):
+        self.paused = not self.paused
+
+    # pause the sequence
+    def pause(self):
+        # TODO update visual display
         #print(f"sequence state: {self.seq.state}")
         if self.seq.state == self.seq.S_started:
             self.seq.pause()
-            print("Pausing Metabolism: not enough resources")
-        #else:
-        #    print("Not pausing: already paused")
+            #print("Pausing Metabolism: not enough resources")
 
-    def int_resumer(self):
+    # resume the sequence
+    def resume(self):
+        # TODO update visual display
         if self.seq.state == self.seq.S_paused:
             self.seq.resume()
-            print("Resuming Metabolism!")
+            #print("Resuming Metabolism!")
         elif self.seq.state == self.seq.S_final:
             self.seq.loop()
-            print("Restarting Metabolism!")
+            #print("Restarting Metabolism!")
 
+    # the wait is completed - exchange the resources!
     def do_exchange(self):
-        print("Metabolism changing 1 carb for 1 nrg")
         self.res_in[0] = self.in_type(self.res_in[0] - self.qty_out)
         self.res_out[0] = self.out_type(min(self.max_out, self.res_out[0]+self.qty_out))
 
