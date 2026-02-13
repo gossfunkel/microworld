@@ -255,7 +255,7 @@ class GameBase(ShowBase):
         print("="*20 + " See you soon!:) " + 20*"=")
 
 if __name__ == "__main__":
-    print("="*20 + " Welcome to microworld! v0.0.2 " + 20*"=")
+    print("="*20 + " Welcome to microworld! v0.0.3 " + 20*"=")
     base = GameBase()                                               # Showbase initialised
 
     base.run()                                                      # taskMgr blocks

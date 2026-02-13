@@ -1,12 +1,12 @@
 [project]
 name = "microworld"
-version = "0.0.2"
+version = "0.0.3"
 description = "A tiny little RTS"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "numpy>=2.4.2",
-    "panda3d==1.11.0.dev3895+shaderpipeline.269",
+    "panda3d>=1.10.16",
     "scipy>=1.17.0",
 ]
 

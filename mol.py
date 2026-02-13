@@ -112,10 +112,13 @@ class Mol:
 class Metabolism:
     def __init__(self, cell, res_in, qty_in, res_out, qty_out, max_out, time):
         self.cell         = cell                                    # owner of this metabolism
+        self.in_type      = type(res_in[0])
         self.res_in       = res_in                                  # pointer to cell's resource counter - input
-        self.qty_in       = qty_in
+        self.qty_in       = self.in_type(qty_in)
+
+        self.out_type     = type(res_out[0])
         self.res_out      = res_out
-        self.qty_out      = qty_out                                 # quantity of resource produced
+        self.qty_out      = self.out_type(qty_out)                  # quantity of resource produced
         self.max_out      = max_out                                 # maximum amount of resource holdable
         self.time         = [time]                                  # how long the process takes
         #self.wait_int     = Wait(time)
@@ -127,27 +130,33 @@ class Metabolism:
         self.seq.loop()
 
     def update(self, task):
+        # FIXME jams once it hits the limit the first time
         if (self.res_in[0] <= self.qty_in):
             self.int_pauser()
         else:
             self.int_resumer()
+        return task.cont
 
     def int_pauser(self):
-        if self.seq.state != 2:
+        #print(f"sequence state: {self.seq.state}")
+        if self.seq.state == self.seq.S_started:
             self.seq.pause()
             print("Pausing Metabolism: not enough resources")
-        else:
-            print("Not pausing: already paused")
+        #else:
+        #    print("Not pausing: already paused")
 
     def int_resumer(self):
-        if self.seq.state == 2:
+        if self.seq.state == self.seq.S_paused:
             self.seq.resume()
             print("Resuming Metabolism!")
+        elif self.seq.state == self.seq.S_final:
+            self.seq.loop()
+            print("Restarting Metabolism!")
 
     def do_exchange(self):
         print("Metabolism changing 1 carb for 1 nrg")
-        self.res_in[0] -= self.qty_out
-        self.res_out[0] = min(self.max_out, self.res_out[0]+self.qty_out)
+        self.res_in[0] = self.in_type(self.res_in[0] - self.qty_out)
+        self.res_out[0] = self.out_type(min(self.max_out, self.res_out[0]+self.qty_out))
 
     def update_metabolic_rate(self, new_time):
         self.time[0] = new_time
@@ -248,7 +257,7 @@ class Cell:
         return self.nodepath.get_pos()
 
     def grow(self):
-        if (self.carbs[0] >= 1) and (self.oils[0] >= 1):                  # growing costs 1 carb and 1 oil BALANCE
+        if (self.carbs[0] >= 1) and (self.oils[0] >= 1):            # growing costs 1 carb and 1 oil BALANCE
             self.carbs[0] -= 1
             self.oils[0]  -= 1
             rad_pregrowth = self.radius
@@ -263,7 +272,7 @@ class Cell:
 
     def heal(self):
         if self.hp[0] < self.max_hp:
-            if (self.oils[0] >= 1):                                    # healing costs 1 oil BALANCE
+            if (self.oils[0] >= 1):                                 # healing costs 1 oil BALANCE
                 self.oils[0] -= 1
                 # no overhealing - just top up health to maximum health at most
                 self.hp[0] = min(self.max_hp, self.hp[0] + 1.)
