@@ -1,4 +1,5 @@
 from direct.interval.IntervalGlobal import *
+from direct.showbase import DirectObject
 from panda3d.core import (
     Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread
 )
@@ -107,6 +108,55 @@ class Mol:
         #if self.cell is not None:
         #    self.cell.remove_cell(self)
 
+# handler class for a sequence that 'produces' one resource from another
+class Metabolism:
+    def __init__(self, cell, res_in, qty_in, res_out, qty_out, max_out, time):
+        self.cell         = cell                                    # owner of this metabolism
+        self.res_in       = res_in                                  # pointer to cell's resource counter - input
+        self.qty_in       = qty_in
+        self.res_out      = res_out
+        self.qty_out      = qty_out                                 # quantity of resource produced
+        self.max_out      = max_out                                 # maximum amount of resource holdable
+        self.time         = [time]                                  # how long the process takes
+        #self.wait_int     = Wait(time)
+        self.seq          = Sequence(                               # the Sequence doing the waiting for us
+            Wait(self.time[0]),
+            Func(self.do_exchange)
+        )
+        base.taskMgr.add(self.update)
+        self.seq.loop()
+
+    def update(self, task):
+        if (self.res_in[0] <= self.qty_in):
+            self.int_pauser()
+        else:
+            self.int_resumer()
+
+    def int_pauser(self):
+        if self.seq.state != 2:
+            self.seq.pause()
+            print("Pausing Metabolism: not enough resources")
+        else:
+            print("Not pausing: already paused")
+
+    def int_resumer(self):
+        if self.seq.state == 2:
+            self.seq.resume()
+            print("Resuming Metabolism!")
+
+    def do_exchange(self):
+        print("Metabolism changing 1 carb for 1 nrg")
+        self.res_in[0] -= self.qty_out
+        self.res_out[0] = min(self.max_out, self.res_out[0]+self.qty_out)
+
+    def update_metabolic_rate(self, new_time):
+        self.time[0] = new_time
+        self.seq  = Sequence(                                       # make a fresh sequence with the new time
+            Wait(self.time[0]),
+            Func(self.do_exchange)
+        )
+        self.seq.loop()
+
 
 # a PC. cell-like blobby guy that blobs about
 class Cell:
@@ -160,28 +210,34 @@ class Cell:
         #self.nodepath.set_shader_input("colliding", self.colliding)
 
         # now set up accessories
-        self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
-        self.mols          = []                                     # array for mols on Cell
-        self.spinner: float = 0                                     # this tells mols on this Cell how to rotate neatly
+        self.bong             = base.sfx.add_bong(bong_freq)        # generate sound effect at given freq
+        self.mols             = []                                  # array for mols on Cell
+        self.spinner: float   = 0                                   # this tells mols on this Cell how to rotate neatly
+        #self.timer: float     = 0.
 
         # stats BALANCE
-        self.max_hp: float   = 10.           # maximum health
-        self.hp: float       = self.max_hp   # current health
-        self.max_nrg: float  = 10.           # maximum energy
-        self.nrg: float      = self.max_nrg  # current energy
+        self.max_hp: float     = 10.                                # maximum health
+        self.hp: list[float]   = [self.max_hp]                      # current health
+        self.max_nrg: float    = 10.                                # maximum energy
+        self.nrg: list[float]  = [self.max_nrg]                     # current energy
 
-        self.salinity: float = 0.            # current SALT level
-        self.hydration: float = 5.           # current WATER level
-        self.carbs: int      = 2             # quantity of CARBS in cell
-        self.oils: int       = 0             # quantity of FATS in cell
-        self.aminos: int     = 0             # quantity of AMINOS in cell
+        # the main stats are singleton lists to be mutable for the metabolism
+        self.salinity          = [0.]                               # current SALT level
+        self.hydration         = [5.]                               # current WATER level
+        self.carbs: list[int]  = [2]                                # quantity of CARBS in cell
+        self.oils: list[int]   = [0]                                # quantity of FATS in cell
+        self.aminos: list[int] = [0]                                # quantity of AMINOS in cell
 
-        self.speed: float    = 1.            # amount to add to position per frame per dt
-        self.nrg_loss_rate   = .01           # rate of energy loss per second
-        self.dry_rate: float = .01           # rate of water loss per second
-        self.carb_digest_time: float = 5.    # seconds to digest a carb into energy
+        self.speed: float      = 1.                                 # amount to add to position per frame per dt
+        self.boost: float      = 0.                                 # added to speed per frame
+        self.nrg_loss_rate     = .01                                # rate of energy loss per second
+        self.dry_rate: float   = .01                                # rate of water loss per second
+        self.carb_digest_time: float = 5.                           # seconds to digest a carb into energy
 
-        self.selected: int   = 0             # currently selected ball
+        # initiate a basic metabolism
+        self.base_metabolism  = Metabolism(self, self.carbs, 1, self.nrg, 1., self.max_nrg, 5.)
+
+        self.selected: int    = 0                                   # currently selected ball
 
         base.taskMgr.add(self.update, str(name)+"-update")
 
@@ -192,34 +248,40 @@ class Cell:
         return self.nodepath.get_pos()
 
     def grow(self):
-        if (self.carbs >= 1) and (self.oils >= 1):                      # growing costs 1 carb and 1 oil
-            self.carbs -= 1
-            self.oils  -= 1
+        if (self.carbs[0] >= 1) and (self.oils[0] >= 1):                  # growing costs 1 carb and 1 oil BALANCE
+            self.carbs[0] -= 1
+            self.oils[0]  -= 1
             rad_pregrowth = self.radius
-            self.max_hp += 1.                                           # increase maximum health
-            self.radius *= 1.1                                          # make the Cell bigger
-            self.nrg_loss_rate += .001                                  # lose energy faster BALANCE
-            self.nodepath.set_shader_input("radius", self.radius)       # update the shader
+            self.max_hp += 1.                                       # increase maximum health
+            self.radius *= 1.1                                      # make the Cell bigger
+            self.nrg_loss_rate += .001                              # lose energy faster BALANCE
+            self.nodepath.set_shader_input("radius", self.radius)   # update the shader
             if int(rad_pregrowth) < int(self.radius):
                 controls.zoom_out()
         else:
             print("Not enough resources (carbs or oils) to grow!")
 
     def heal(self):
-        if self.hp < self.max_hp:
-            if (self.oils >= 1):
-                self.oils -= 1
+        if self.hp[0] < self.max_hp:
+            if (self.oils[0] >= 1):                                    # healing costs 1 oil BALANCE
+                self.oils[0] -= 1
                 # no overhealing - just top up health to maximum health at most
-                self.hp = min(self.max_hp, self.hp + 1.)
+                self.hp[0] = min(self.max_hp, self.hp[0] + 1.)
             else:
                 print("Not enough resources (oils) to heal!")
         else:
             print("Already at full hp!")
 
+    def boost(self):
+        if (self.aminos[0] >= 1) and (self.carbs[0] >= 1):                # boosts cost 1 amino and 1 carb BALANCE
+            self.aminos[0] -= 1
+            self.carbs[0] -= 1
+            self.boost += 1.5
+
     def make_mol(self, *mols: MOLTYPE):
-        if self.nrg > 1.:
+        if self.nrg[0] > 1.:
             for mol in mols:
-                self.nrg -= 1.
+                self.nrg[0] -= 1.
                 match mol:
                     case MOLTYPE.AMINO:
                         self.mols.append(Mol(MOLTYPE.AMINO, self.name+"-AMINOmol-"+str( len(self.mols)), 
@@ -258,23 +320,21 @@ class Cell:
 
         match mol_type:                                             # activate the appropriate effect
             case MOLTYPE.WATER:
-                self.hydration += 1.                                # hydration station! store water
-                self.salinity -= .25                                # water reduces salinity
+                self.hydration[0] += 1.                                # hydration station! store water
+                self.salinity[0] -= .25                                # water reduces salinity
             case MOLTYPE.SALT:
-                self.salinity += 1.                                 # TODO salinity moves energy loss to hp loss
-                self.nrg_loss_rate *= .75                           # reduce energy loss rate by a quarter BALANCE
-                self.dry_rate *= 1.1                                # salt dehydrates you hahaha
+                self.salinity[0] += 1.                                 # TODO salinity moves energy loss to hp loss
+                self.nrg_loss_rate *= .75                              # reduce energy loss rate by a quarter BALANCE
+                self.dry_rate *= 1.1                                   # salt dehydrates you hahaha
             case MOLTYPE.SUGAR:
-                self.nrg = min(self.max_nrg, self.nrg + 1.)         # sugar is consumed for immediate energy
+                self.nrg[0] = min(self.max_nrg, self.nrg[0] + 1.)      # sugar is consumed for immediate energy
             case MOLTYPE.CARB:
-                self.carbs += 1                                     # carbs are stored as a resource
+                self.carbs[0] += 1                                     # carbs are stored as a resource
             case MOLTYPE.OILS:
-                self.oils += 1                                      # oils are stored as a resource
+                self.oils[0] += 1                                      # oils are stored as a resource
             case MOLTYPE.AMINO:
-                print("Power up!")
-                self.aminos += 1                                    # aminos are stored as a resource
+                self.aminos[0] += 1                                    # aminos are stored as a resource
                 # TODO metabolic objectives; growing utilities. Menu or progression? Unlocks?
-                self.speed *= 1.5                                   # increase cell speed
 
     def add_mol(self, mol=None, mols: int = 1):
         #print(f"adding mol to {self.name}")
@@ -290,14 +350,15 @@ class Cell:
         #vtx_view = memoryview(self.nodepath.node().get_vertex_data().modify_array(0)).cast('B').cast('f')
         #print(f"some verts from {self.name}: 0: {vtx_view[0]}, 1: {vtx_view[1]}, 2: {vtx_view[2]}")
 
-        dt = globalClock.get_dt()
+        dt = globalClock.get_dt()                                   # get one dt for this whole task call
+        #self.timer += dt                                            # add it to the timer for metabolism
 
-        if (self.salinity > 4.):
-            self.hp -= (self.salinity-4.)*.01*dt                       # damage from salting out BALANCE
+        if (self.salinity[0] > 4.):
+            self.hp[0] -= (self.salinity[0]-4.)*.01*dt                    # damage from salting out BALANCE
 
-        self.nrg -= self.nrg_loss_rate*dt                              # tick energy loss
+        self.nrg[0] -= self.nrg_loss_rate*dt                           # tick energy loss
 
-        if (self.nrg <= 0.) or (self.hp <= 0.): self.die()          # check if cell should die
+        if (self.nrg[0] <= 0.) or (self.hp[0] <= 0.): self.die()          # check if cell should die
 
         # update cell uv as it travels through the chunks
         xneg = -1 if self.pos().x < 0 else 1
@@ -351,6 +412,8 @@ class Cell:
         self.velocity = self.velocity/10. if self.velocity > EPSILON else Vec2(0.,0.) 
 
         self.spinner += dt%360
+
+        self.boost = max(0., self.boost-dt)                         # diminish boost
         
         #self.colliding = False
         return task.cont
@@ -358,15 +421,16 @@ class Cell:
     # move the cell by its nodepath.pos
     def move(self, direction):
         pos = self.pos()
+        speed = self.speed + self.boost
         match direction:
             case "left":                                            # go left
-                self.velocity -=  Vec2(self.speed,0.)
+                self.velocity -=  Vec2(speed,0.)
             case "right":                                           # go right
-                self.velocity +=  Vec2(self.speed,0.)
+                self.velocity +=  Vec2(speed,0.)
             case "fwd":                                             # go forwards
-                self.velocity +=  Vec2(0.,self.speed)
+                self.velocity +=  Vec2(0.,speed)
             case "back":                                            # ...you guessed it
-                self.velocity -=  Vec2(0.,self.speed)
+                self.velocity -=  Vec2(0.,speed)
             case _: 
                 print("Move direction not recognised!")
 

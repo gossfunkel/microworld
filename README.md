@@ -16,8 +16,8 @@ of course, growing!
 - Press `r` to consume 1 unit of energy to make an FRNA mol.
 - Press `g` to use 1 carb and 1 oil to grow your cell.
 - Press `h` to rapidly heal your cell for 1 oil.
-- Use `j` and `k` to select a gathered mol.
-- Press `Spacebar` to consume the selected mol.
+- Use `j` and `k` to select from collected mols (floating above your cell).
+- Press `spacebar` to consume the selected mol.
 
 
 The different ball types have different effects:
@@ -31,8 +31,9 @@ The different ball types have different effects:
 
 ### TODO LIST:
 - finish implementing a tessellation shader to smooth the cell outlines
-- polish resources; sort HUD with display for all resources, make resources fade over time after consumption
+- polish resources; make resources fade over time after consumption
 - figure out how to implement collisions between cells and other cells / surfaces
+- replace keyboard control system- so that multiple keys can be pressed at once
 - add more inert terrain
 - add genes (upgrades):
     - flagellum (significantly improves speed, looks cool)
@@ -66,3 +67,25 @@ The different ball types have different effects:
     - fungal symbiosis
     - adaptation to environment (like achievements, has requirements)
     - mutations
+
+## History
+
+#### 0.0.3
+Reworked the mol system to `WATER`, `SALT`, `SUGAR`, `CARBS`, `OILS`, and `AMINO`.
+Created system by which consumed mols fill various stocks or balance certain values.
+Added basic metabolic system- cell turns consumed CARBS into energy. Growth, healing, and [speed boosts] are now abilities that cost resources.
+Player can now select between the mols they've collected with the `j` and `k` keys.
+[The cell models are now smoother due to the use of a tessellation shader]
+
+#### 0.0.2
+Made it all into cells and 'mols'. Created the MOLTYPES.
+Added ability to 'consume' collected mols with `spacebar`, with gold `FOOD` type to grow the cell radius, or purple `FRNA` type to increase cell speed.
+Created a basic heads-up-display with health and mana bars.
+Set up system of depleting mana that can be topped up by consuming teal `MANA` mols.
+User can now zoom in and out with the scrollwheel, and click and drag to move the camera around.
+
+#### 0.0.1
+Created blobs that wobble about when their nodepath is moved.
+Added some controls to allow the player to move the blob about on a 2D plane.
+Added glowing balls and the ability to 'collect' them (they become affiliated with the blobs on collision).
+Moved blobs into a vertex shader and learned about vertex pulling. Broke shader generator; no more easy glow or antialiasing!

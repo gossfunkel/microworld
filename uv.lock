@@ -15,7 +15,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.4.2" },
-    { name = "panda3d", specifier = "==1.11.0.dev3895+shaderpipeline.269" },
+    { name = "panda3d", url = "https://buildbot.panda3d.org/downloads/e68c2a934b6bc50b4f316af6fafeb72d31471edb/panda3d-1.11.0.dev3985+shaderpipeline.318-cp313-cp313-win_amd64.whl" },
     { name = "scipy", specifier = ">=1.17.0" },
 ]
 
@@ -71,13 +71,10 @@ wheels = [
 
 [[package]]
 name = "panda3d"
-version = "1.11.0.dev3895+shaderpipeline.269"
-source = { registry = "https://archive.panda3d.org/" }
+version = "1.11.0.dev3985+shaderpipeline.318"
+source = { url = "https://buildbot.panda3d.org/downloads/e68c2a934b6bc50b4f316af6fafeb72d31471edb/panda3d-1.11.0.dev3985+shaderpipeline.318-cp313-cp313-win_amd64.whl" }
 wheels = [
-    { url = "https://buildbot.panda3d.org/downloads/06255fcbeef0a9b0bac03f4891f74a63c1e5d4a2/panda3d-1.11.0.dev3895+shaderpipeline.269-cp313-cp313-win_amd64.whl", hash = "md5:8fe738e26eb62ed4ce66af53e098d51f" },
-    { url = "https://buildbot.panda3d.org/downloads/06255fcbeef0a9b0bac03f4891f74a63c1e5d4a2/panda3d-1.11.0.dev3895+shaderpipeline.269-cp313-cp313t-win_amd64.whl", hash = "md5:922b68955fbda803a1deaa63353fdfc6" },
-    { url = "https://buildbot.panda3d.org/downloads/06255fcbeef0a9b0bac03f4891f74a63c1e5d4a2/panda3d-1.11.0.dev3895+shaderpipeline.269-cp314-cp314-win_amd64.whl", hash = "md5:4586363b2275e343dd89a93ca8785b91" },
-    { url = "https://buildbot.panda3d.org/downloads/06255fcbeef0a9b0bac03f4891f74a63c1e5d4a2/panda3d-1.11.0.dev3895+shaderpipeline.269-cp314-cp314t-win_amd64.whl", hash = "md5:fe44c83642f840df91e94a29472c3d29" },
+    { url = "https://buildbot.panda3d.org/downloads/e68c2a934b6bc50b4f316af6fafeb72d31471edb/panda3d-1.11.0.dev3985+shaderpipeline.318-cp313-cp313-win_amd64.whl", hash = "sha256:03aa9fdebde7efc1870f8552831a528a291bb2e628264978ae73dc6fb1817dba" },
 ]
 
 [[package]]

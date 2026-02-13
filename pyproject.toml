@@ -12,3 +12,6 @@ dependencies = [
 
 [[tool.uv.index]]
 url = "https://archive.panda3d.org/"
+
+[tool.uv.sources]
+panda3d = { url = "https://buildbot.panda3d.org/downloads/e68c2a934b6bc50b4f316af6fafeb72d31471edb/panda3d-1.11.0.dev3985+shaderpipeline.318-cp313-cp313-win_amd64.whl" }

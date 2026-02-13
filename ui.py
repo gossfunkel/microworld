@@ -109,14 +109,14 @@ def update(task):
     base.cam.setPos(base.p1.pos() + base.CAM_POS)                   # camera follows p1
 
     base.player_mols_count.setText(str(len(base.p1.mols)))          # update UI
-    base.player_hydration.setText(str(base.p1.hydration))
-    base.player_salinity.setText(str(base.p1.salinity))
-    base.player_carb.setText(str(base.p1.carbs))
-    base.player_oil.setText(str(base.p1.oils))
-    base.player_amino.setText(str(base.p1.aminos))
+    base.player_hydration.setText(str(base.p1.hydration[0]))
+    base.player_salinity.setText(str(base.p1.salinity[0]))
+    base.player_carb.setText(str(base.p1.carbs[0]))
+    base.player_oil.setText(str(base.p1.oils[0]))
+    base.player_amino.setText(str(base.p1.aminos[0]))
 
-    base.nrg_label_v.setText(str(base.p1.nrg)[:4]+"/"+str(base.p1.max_hp)[:2])
-    base.hp_label_v.setText(str(base.p1.hp)[:4]+"/"+str(base.p1.max_nrg)[:2])
-    base.nrg_bar.set_scale((base.p1.nrg/base.p1.max_nrg)*.75,1.,1.)
-    base.hp_bar.set_scale((base.p1.hp/base.p1.max_hp)*.75,1.,1.)
+    base.nrg_label_v.setText(str(base.p1.nrg[0])[:4]+"/"+str(base.p1.max_hp)[:2])
+    base.hp_label_v.setText(str(base.p1.hp[0])[:4]+"/"+str(base.p1.max_nrg)[:2])
+    base.nrg_bar.set_scale((base.p1.nrg[0]/base.p1.max_nrg)*.75,1.,1.)
+    base.hp_bar.set_scale((base.p1.hp[0]/base.p1.max_hp)*.75,1.,1.)
     return task.cont
