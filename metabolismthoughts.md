@@ -1,3 +1,23 @@
+updated 25 march 2026:
+
+
+Resources:
+- are accessed randomly
+- are accessed independently of each other due to async
+- have a small footprint in memory
+- are few in number (per cell)
+
+The Cell object acts as an arena for all associated data; when a cell despawns, 
+    it takes all the resources, processes, and references below it in the tree 
+    with it. 
+
+A linked list / pointer-reference-based approach works well here with these 
+    data sizes and access patterns. 
+
+
+
+============= original notes (~jan 2026):
+
 the picture in my head is: 
 - ideal case: user turns on the process, turns 1 resource `a` into 1 resource `b` , and then switches it off. Interval should run to completion, and then end
 - prepared-for case: user turns on the process, then turns of the process before the end. The interval should terminate when the process is turned off
