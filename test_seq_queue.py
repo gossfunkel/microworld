@@ -6,8 +6,9 @@ from panda3d.core import load_prc_file_data
 CONFIG: str = "window-type none"
 
 async def gen_out(task):
-    print(f"outputting {task.frame}")
-    await Task.pause(1.)
+    print(f"outputting {task.frame}...")
+    await Func(Wait(1.))
+    print("Bing!")
     return task.again
 
 if __name__ == '__main__':
@@ -15,5 +16,7 @@ if __name__ == '__main__':
     ShowBase()
 
     base.taskMgr.add(gen_out, "gen_out")
+
+    pauser = Sequence(Wait(3.), Func)
 
     base.run()

@@ -1,7 +1,7 @@
 from direct.interval.IntervalGlobal import *
 from direct.showbase import DirectObject
 from panda3d.core import (
-    Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread
+    Vec2, Vec3, Vec4, BamFile, Shader, ShaderBuffer, GeomEnums, Thread, ShadeModelAttrib
 )
 import numpy as np
 from enum import Enum
@@ -133,7 +133,6 @@ class Metabolism:
         self.seq.loop()
 
     def update(self, task):
-        # FIXME jams once it hits the limit the first time
         if not self.paused:
             if (self.res_in[0] <= self.qty_in):
                 self.pause()
@@ -228,6 +227,8 @@ class Cell:
         self.nodepath.set_shader_input("model_velocity", self.velocity)
         self.nodepath.set_shader_input("col", self.col)
         #self.nodepath.set_shader_input("colliding", self.colliding)
+
+        #node.set_attrib(ShadeModelAttrib.make(ShadeModelAttrib.MSmooth))
 
         # now set up accessories
         self.bong             = base.sfx.add_bong(bong_freq)        # generate sound effect at given freq

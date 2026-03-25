@@ -322,6 +322,11 @@ class Cell:
         #     else:
         #         base.game_over(" You died! ")
 
+def update_cam(task):
+    base.cam.set_pos(0., np.cos(task.frame), np.sin(task.frame))
+    #base.cam.setHpr(task.frame,0.,0.)
+    base.cam.look_at(base.p1.nodepath)
+
 
 if __name__ == '__main__':
     from direct.showbase.ShowBase import ShowBase
@@ -354,5 +359,7 @@ if __name__ == '__main__':
     base.cam.set_pos(CAM_POS)
     #base.cam.setHpr(0,-18,0)                                        # look down at your Cell! 
     base.cam.look_at(base.p1.nodepath)
+
+    base.taskMgr.add(update_cam, "cam_spin")
 
     base.run()
