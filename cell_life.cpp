@@ -1,5 +1,6 @@
-#include <bitset>
 #include <cstdint>
+#include <genericAsyncTask.h>
+#include "asyncTaskManager.h"
 
 enum ResourceTypes {
     WATER,
