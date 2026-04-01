@@ -1,6 +1,5 @@
 import ctypes
 from ctypes import util, cdll, c_int, c_float, c_void_p
-
 import os
 
 print("- Initialising cell_life library bindings...")
@@ -82,7 +81,7 @@ libcell.Cell_add_amino.argtypes = [c_void_p, c_float]
 libcell.Cell_add_amino.restype  = c_float
 
 # process management
-libcell.Cell_add_process.argtypes = [c_void_p, c_int, c_int, c_float, c_float, c_float, c_int]
+libcell.Cell_add_process.argtypes = [c_void_p, c_void_p, c_int, c_int, c_float, c_float, c_float, c_int]
 libcell.Cell_add_process.restype  = c_void_p
 
 libcell.Process_get_task.argtypes = [c_void_p]

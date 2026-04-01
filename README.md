@@ -68,7 +68,25 @@ The different ball types have different effects:
     - adaptation to environment (like achievements, has requirements)
     - mutations
 
+## BUILD
+
+Rebuilding the C++ library is possible, but I've only just figured out how to 
+get it to build on my own system!  Hahaha
+
+The library is currently configured for Windows 64bit *only*!
+```sh
+rm -r build
+mkdir build && cd build
+cmake .. -A x64
+cmake --build . --config RelWithDebInfo
+```
+
 ## History
+
+#### 0.0.4
+Created a C++ dynamic library so I could manage my resources with pointers.  
+Currently feels like the cost/benefit balance might have been off, at this point, but I have just slogged through making the build system etc.  
+The key to making this an advantage is using the C++ library for efficient data-oriented design for the heart of the economy engine in the game.  
 
 #### 0.0.3
 Reworked the mol system to `WATER`, `SALT`, `SUGAR`, `CARBS`, `OILS`, and `AMINO`.

@@ -1,7 +1,7 @@
 [project]
 name = "microworld"
-version = "0.0.3"
-description = "A tiny little RTS"
+version = "0.0.4"
+description = "A squishy little RTS"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

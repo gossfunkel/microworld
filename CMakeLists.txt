@@ -10,11 +10,9 @@ include_directories(C:/Panda3D-1.11.0-x64/include)
 link_directories(C:/Panda3D-1.11.0-x64/lib)
 add_library(cell_life SHARED src/cell_life.cpp)
 target_link_libraries(cell_life
-    libp3framework
     libpanda
     libpandafx
     libpandaexpress
     libp3dtoolconfig
     libp3dtool
-    libp3direct
 )

@@ -1,3 +1,4 @@
+#include <iostream>
 //#include <AsyncTask.h>
 #include "asyncTaskManager.h"
 //#include <cstdint>
@@ -74,14 +75,16 @@ public:
             if (task->get_elapsed_time() - this->m_time_paused < this->time)
                 return AsyncTask::DS_cont;
             if (!this->do_exchange()) return AsyncTask::DS_again; // TODO throw error
-            return AsyncTask::DS_done; }, "proc_task")),
-          m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, 
+            return AsyncTask::DS_done; }, "proc_task", 0)
+          ), m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, 
           input{in}, output{out}, cost{cst}, yield{yld}, time{tm} {
+            std::cout << "--c> Constructing new process!\n";
     }
 
     // returns success/failure
     bool do_exchange() {
         // TODO acquire the GIL
+        std::cout << "--c> Doing exchange!\n";
 
         // fail if insufficient resource in
         if (input->qty < cost) return 1;
@@ -120,7 +123,8 @@ public:
 
     // returns pause state
     bool toggle_pause() {
-        m_paused = !m_paused;
+        if (m_paused) resume();
+        else pause();
         return m_paused;
     }
 };
@@ -149,6 +153,7 @@ private:
 public:
     Cell(int idx, float size, int abilities) 
         : m_idx {idx}, m_size {size}, m_abilities {abilities} {
+        std::cout << "--c> Constructing new cell!\n";
         m_wtr = Resource(ResourceTypes(WATER), 5.f, 10.f);
         m_slt = Resource(ResourceTypes(SALTS), 2.f, 10.f);
         m_sgr = Resource(ResourceTypes(SUGAR), 0.f, 10.f);
@@ -156,6 +161,9 @@ public:
         m_oil = Resource(ResourceTypes(OILS),  0.f, 10.f);
         m_amo = Resource(ResourceTypes(AMINO), 0.f, 10.f);
         m_metabolism = {};
+        std::cout << "--c> new cell resources: water " << m_wtr.qty << ", salts " << m_slt.qty 
+                                       << ", sugar " << m_sgr.qty << ", carbs " << m_crb.qty 
+                                     << ", oils " << m_oil.qty << ", amino " << m_amo.qty << ".\n";
     }
 
     // TODO constructor for passing in sequence of values for initial resources
@@ -265,6 +273,7 @@ public:
 
     Process* add_process(PT(AsyncTaskManager) task_mgr_ptr, int in_type, int out_type, float cost, float yield, float time, bool start_paused) {
         // extend the metabolism vector and initialise a new process in the new field
+        std::cout << "--c> Cell initialising the construction of a new process:\n";
         Resource* in_res;
         Resource* out_res;
         switch (in_type) {
@@ -283,7 +292,9 @@ public:
             case ResourceTypes(OILS):  out_res = &m_oil; break;
             case ResourceTypes(AMINO): out_res = &m_amo; break;
         }
-        m_metabolism.emplace_back(Process(task_mgr_ptr, in_res, out_res, cost, yield, time, start_paused));
+        Process new_proc = Process(task_mgr_ptr, in_res, out_res, cost, yield, time, start_paused);
+        std::cout << "--c> New Process made! Placing process into cell's 'metabolism' vector:\n";
+        m_metabolism.emplace_back(new_proc);
         return &m_metabolism.at(m_metabolism.size()-1);
     }
 };
