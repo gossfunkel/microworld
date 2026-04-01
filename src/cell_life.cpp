@@ -1,6 +1,6 @@
-#include <cstdint>
-#include <genericAsyncTask.h>
+//#include <AsyncTask.h>
 #include "asyncTaskManager.h"
+//#include <cstdint>
 
 enum ResourceTypes {
     WATER,
@@ -21,13 +21,13 @@ enum Ability {
 };
 
 typedef struct Resource {
-    uint_fast32_t type;
+    int type;
     float qty;
     float max;    
 } Resource;
 
 extern "C" {
-    void* Cell_new(uint_fast64_t idx, float size, int bits);
+    void* Cell_new(int idx, float size, int bits);
     void Cell_delete(void* cellptr);
     float Cell_get_water(void* cellptr);
     int Cell_spend_water(void* cellptr, float qty);
@@ -47,7 +47,7 @@ extern "C" {
     float Cell_get_amino(void* cellptr);
     int Cell_spend_amino(void* cellptr, float qty);
     float Cell_add_amino(void* cellptr, float qty);
-    void* Cell_add_process(void* cellptr, int in, int out, float cost, float yield, float time, bool start_paused);
+    void* Cell_add_process(void* cellptr, void* task_mgr_ptr, int in, int out, float cost, float yield, float time, int start_paused);
     void* Process_get_task(void* proc);
 }
 
@@ -70,10 +70,13 @@ public:
     // TODO FIXME type issues
     Process(PT(AsyncTaskManager) task_mgr_ptr, Resource* in, Resource* out, float cst, 
             float yld, float tm, bool start_paused)
-        : update_task(task_mgr_ptr->add([this]() mutable { return this->process_task(this->update_task); })),
-          m_prepause_time{0.}, m_time_paused(0.), m_paused{start_paused}, 
+        : update_task(task_mgr_ptr->add([this](AsyncTask* task) mutable { 
+            if (task->get_elapsed_time() - this->m_time_paused < this->time)
+                return AsyncTask::DS_cont;
+            if (!this->do_exchange()) return AsyncTask::DS_again; // TODO throw error
+            return AsyncTask::DS_done; }, "proc_task")),
+          m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, 
           input{in}, output{out}, cost{cst}, yield{yld}, time{tm} {
-        ;
     }
 
     // returns success/failure
@@ -120,14 +123,6 @@ public:
         m_paused = !m_paused;
         return m_paused;
     }
-
-    AsyncTask::DoneStatus process_task(AsyncTask *task) {
-        if (task->get_elapsed_time() - m_time_paused < time)
-            return AsyncTask::DS_cont;
-        bool result_exchange = do_exchange();
-        if (!result_exchange) return AsyncTask::DS_again;
-        return AsyncTask::DS_done;
-    }
 };
 
 /*AsyncTask::DoneStatus process_task(GenericAsyncTask* task, void* data) {
@@ -141,7 +136,7 @@ public:
 // put these on the heap: each acts as an arena for all contained data
 class Cell {
 private:
-    uint_fast64_t m_idx;
+    int m_idx;
     float m_size;
     Resource m_wtr;
     Resource m_slt;
@@ -152,14 +147,14 @@ private:
     std::vector<Process> m_metabolism;
     int m_abilities;
 public:
-    Cell(uint_fast64_t idx, float size, int abilities) 
+    Cell(int idx, float size, int abilities) 
         : m_idx {idx}, m_size {size}, m_abilities {abilities} {
-        m_wtr = (Resource){ResourceTypes(WATER), 5.f, 10.f};
-        m_slt = (Resource){ResourceTypes(SALTS), 2.f, 10.f};
-        m_sgr = (Resource){ResourceTypes(SUGAR), 0.f, 10.f};
-        m_crb = (Resource){ResourceTypes(CARBS), 0.f, 10.f};
-        m_oil = (Resource){ResourceTypes(OILS),  0.f, 10.f};
-        m_amo = (Resource){ResourceTypes(AMINO), 0.f, 10.f};
+        m_wtr = Resource(ResourceTypes(WATER), 5.f, 10.f);
+        m_slt = Resource(ResourceTypes(SALTS), 2.f, 10.f);
+        m_sgr = Resource(ResourceTypes(SUGAR), 0.f, 10.f);
+        m_crb = Resource(ResourceTypes(CARBS), 0.f, 10.f);
+        m_oil = Resource(ResourceTypes(OILS),  0.f, 10.f);
+        m_amo = Resource(ResourceTypes(AMINO), 0.f, 10.f);
         m_metabolism = {};
     }
 
@@ -179,7 +174,7 @@ public:
     }
 
     float add_water(float qty) {
-        m_wtr.qty = std::max(m_wtr.qty + qty, m_wtr.max);
+        m_wtr.qty = std::min(m_wtr.qty + qty, m_wtr.max);
         return m_wtr.qty;
     }
 
@@ -196,7 +191,7 @@ public:
     }
 
     float add_salts(float qty) {
-        m_slt.qty = std::max(m_slt.qty + qty, m_slt.max);
+        m_slt.qty = std::min(m_slt.qty + qty, m_slt.max);
         return m_slt.qty;
     }
 
@@ -213,7 +208,7 @@ public:
     }
 
     float add_sugar(float qty) {
-        m_sgr.qty = std::max(m_sgr.qty + qty, m_sgr.max);
+        m_sgr.qty = std::min(m_sgr.qty + qty, m_sgr.max);
         return m_sgr.qty;
     }
 
@@ -230,7 +225,7 @@ public:
     }
 
     float add_carbs(float qty) {
-        m_crb.qty = std::max(m_crb.qty + qty, m_crb.max);
+        m_crb.qty = std::min(m_crb.qty + qty, m_crb.max);
         return m_crb.qty;
     }
 
@@ -247,7 +242,7 @@ public:
     }
 
     float add_oils(float qty) {
-        m_oil.qty = std::max(m_oil.qty + qty, m_oil.max);
+        m_oil.qty = std::min(m_oil.qty + qty, m_oil.max);
         return m_oil.qty;
     }
 
@@ -264,7 +259,7 @@ public:
     }
 
     float add_amino(float qty) {
-        m_amo.qty = std::max(m_amo.qty + qty, m_amo.max);
+        m_amo.qty = std::min(m_amo.qty + qty, m_amo.max);
         return m_amo.qty;
     }
 
@@ -296,7 +291,7 @@ public:
 // C-type binding funcs
 
 // Cell object constructor and destructor
-void* Cell_new(uint_fast64_t idx, float size, int bits) {
+void* Cell_new(int idx, float size, int bits) {
     // todo use C++ casting
     return (void*) new Cell(idx, size, bits);
 }
@@ -371,10 +366,10 @@ float Cell_add_amino(void* cellptr, float qty) {
 }
 
 // process (n.b. make sure to add task to taskmgr)
-void* Cell_add_process(void* cellptr, void* task_mgr_ptr,  int in, int out, float cost, 
-                    float yield, float time, bool start_paused) {
-    return (void*)(((Cell*)cellptr)->add_process((PT(AsyncTaskManager))task_mgr_ptr, in, 
-                    out, cost, yield, time, start_paused));
+void* Cell_add_process(void* cellptr, void* task_mgr_ptr, int in, int out, float cost, 
+                    float yield, float time, int start_paused) {
+    return (void*)(((Cell*)cellptr)->add_process((AsyncTaskManager*)task_mgr_ptr, in, 
+                    out, cost, yield, time, (bool)start_paused));
 }
 
 void* Process_get_task(void* proc) {
