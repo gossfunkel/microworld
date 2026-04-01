@@ -6,7 +6,7 @@ import cell_life
 from cell_life import libcell
 
 async def print_sugar(task):
-    await Func(Wait(1.))
+    await Wait(1.)
     print(f"Cell sugar: {libcell.Cell_get_sugar(base.test_cell)}")
     return task.again
 
@@ -31,9 +31,9 @@ if __name__ == '__main__':
     print(f"Water after spending 3: {libcell.Cell_get_water(base.test_cell)}")
 
     # 1 carbs in, 1 sugar out 
-    libcell.Cell_add_process(base.test_cell, AsyncTaskManager.getGlobalPtr().ref(), 4, 3, 1., 1., 1., 0)
+    libcell.Cell_add_process(base.test_cell, AsyncTaskManager.getGlobalPtr().ref(), 4, 3, 1., 1., 1000., 0)
 
-    async_task_mgr.add(print_sugar, "pr_sgr")
+    base.taskMgr.add(print_sugar, "pr_sgr")
 
     base.accept("escape", base.userExit)
     base.run()

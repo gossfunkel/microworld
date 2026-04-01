@@ -61,23 +61,31 @@ private:
     double m_time_paused;
     bool m_paused;
 public:
+    float time;
     PT(AsyncTask) update_task;
     Resource* input;
     Resource* output;
     float cost;
     float yield;
-    float time;
 
     // TODO FIXME type issues
-    Process(PT(AsyncTaskManager) task_mgr_ptr, Resource* in, Resource* out, float cst, 
+    Process(Resource* in, Resource* out, float cst, 
             float yld, float tm, bool start_paused)
-        : update_task(task_mgr_ptr->add([this](AsyncTask* task) mutable { 
-            if (task->get_elapsed_time() - this->m_time_paused < this->time)
-                return AsyncTask::DS_cont;
-            if (!this->do_exchange()) return AsyncTask::DS_again; // TODO throw error
-            return AsyncTask::DS_done; }, "proc_task", 0)
-          ), m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, 
-          input{in}, output{out}, cost{cst}, yield{yld}, time{tm} {
+        : m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, time{tm},
+          update_task(AsyncTaskManager::get_global_ptr()->add([this](AsyncTask* task) mutable { 
+            std::cout << "--c> task elapsed time: " << task->get_elapsed_time() 
+                        << ", and timer length: " << this->time << ".\n";
+            if (task->get_elapsed_time() - this->m_time_paused > this->time) {
+                if (!this->do_exchange()) std::cerr << "--c> EXHANGE FAILED!\n";
+                else {
+                    this->m_time_paused = 0.f;
+                    return AsyncTask::DS_again;
+                }
+            }
+            return AsyncTask::DS_cont; // TODO throw error
+            //return AsyncTask::DS_done; 
+            }, "proc_task", 0)
+          ), input{in}, output{out}, cost{cst}, yield{yld} {
             std::cout << "--c> Constructing new process!\n";
     }
 
@@ -87,13 +95,13 @@ public:
         std::cout << "--c> Doing exchange!\n";
 
         // fail if insufficient resource in
-        if (input->qty < cost) return 1;
+        if (this->input->qty < this->cost) return 1;
         // charge input and yield to output
-        input->qty -= cost;
-        output->qty += yield;
+        this->input->qty -= this->cost;
+        this->output->qty += this->yield;
         // reset pause timer
-        m_prepause_time = 0.;
-        m_time_paused = 0.;
+        this->m_prepause_time = 0.;
+        this->m_time_paused = 0.;
 
         // TODO release the GIL
 
@@ -292,7 +300,7 @@ public:
             case ResourceTypes(OILS):  out_res = &m_oil; break;
             case ResourceTypes(AMINO): out_res = &m_amo; break;
         }
-        Process new_proc = Process(task_mgr_ptr, in_res, out_res, cost, yield, time, start_paused);
+        Process new_proc = Process(in_res, out_res, cost, yield, time, start_paused);
         std::cout << "--c> New Process made! Placing process into cell's 'metabolism' vector:\n";
         m_metabolism.emplace_back(new_proc);
         return &m_metabolism.at(m_metabolism.size()-1);
