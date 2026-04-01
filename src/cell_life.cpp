@@ -27,123 +27,26 @@ typedef struct Resource {
     float max;    
 } Resource;
 
+typedef struct Process {
+    double prepause_time;
+    double time_paused;
+    float time;
+    bool paused;
+    unsigned int input;
+    unsigned int output;
+    float cost;
+    float yield;
+} Process;
+
 extern "C" {
     void* Cell_new(int idx, float size, int bits);
     void Cell_delete(void* cellptr);
-    float Cell_get_water(void* cellptr);
-    int Cell_spend_water(void* cellptr, float qty);
-    float Cell_add_water(void* cellptr, float qty);
-    float Cell_get_salts(void* cellptr);
-    int Cell_spend_salts(void* cellptr, float qty);
-    float Cell_add_salts(void* cellptr, float qty);
-    float Cell_get_oils(void* cellptr);
-    int Cell_spend_oils(void* cellptr, float qty);
-    float Cell_add_oils(void* cellptr, float qty);
-    float Cell_get_sugar(void* cellptr);
-    int Cell_spend_sugar(void* cellptr, float qty);
-    float Cell_add_sugar(void* cellptr, float qty);
-    float Cell_get_carbs(void* cellptr);
-    int Cell_spend_carbs(void* cellptr, float qty);
-    float Cell_add_carbs(void* cellptr, float qty);
-    float Cell_get_amino(void* cellptr);
-    int Cell_spend_amino(void* cellptr, float qty);
-    float Cell_add_amino(void* cellptr, float qty);
-    void* Cell_add_process(void* cellptr, void* task_mgr_ptr, int in, int out, float cost, float yield, float time, int start_paused);
-    void* Process_get_task(void* proc);
+    float Cell_get_resource(void* cellptr, unsigned int res_idx);
+    int Cell_spend_resource(void* cellptr, unsigned int res_idx, float qty);
+    float Cell_add_resource(void* cellptr, unsigned int res_idx, float qty);
+    unsigned int Cell_add_process(void* cellptr, unsigned int in, unsigned int out, float cost, float yield, float time, int start_paused);
+    //void* Process_get_task(void* proc);
 }
-
-//AsyncTask::DoneStatus process_task(GenericAsyncTask* task, void* data);
-
-// body
-class Process {
-private:
-    double m_prepause_time;
-    double m_time_paused;
-    bool m_paused;
-public:
-    float time;
-    PT(AsyncTask) update_task;
-    Resource* input;
-    Resource* output;
-    float cost;
-    float yield;
-
-    // TODO FIXME type issues
-    Process(Resource* in, Resource* out, float cst, 
-            float yld, float tm, bool start_paused)
-        : m_prepause_time(0.), m_time_paused(0.), m_paused{start_paused}, time{tm},
-          update_task(AsyncTaskManager::get_global_ptr()->add([this](AsyncTask* task) mutable { 
-            std::cout << "--c> task elapsed time: " << task->get_elapsed_time() 
-                        << ", and timer length: " << this->time << ".\n";
-            if (task->get_elapsed_time() - this->m_time_paused > this->time) {
-                if (!this->do_exchange()) std::cerr << "--c> EXHANGE FAILED!\n";
-                else {
-                    this->m_time_paused = 0.f;
-                    return AsyncTask::DS_again;
-                }
-            }
-            return AsyncTask::DS_cont; // TODO throw error
-            //return AsyncTask::DS_done; 
-            }, "proc_task", 0)
-          ), input{in}, output{out}, cost{cst}, yield{yld} {
-            std::cout << "--c> Constructing new process!\n";
-    }
-
-    // returns success/failure
-    bool do_exchange() {
-        // TODO acquire the GIL
-        std::cout << "--c> Doing exchange!\n";
-
-        // fail if insufficient resource in
-        if (this->input->qty < this->cost) return 1;
-        // charge input and yield to output
-        this->input->qty -= this->cost;
-        this->output->qty += this->yield;
-        // reset pause timer
-        this->m_prepause_time = 0.;
-        this->m_time_paused = 0.;
-
-        // TODO release the GIL
-
-        // return success
-        return 0;
-    }
-
-    // returns success/failure
-    bool pause() {
-        // note time at which task is paused
-        m_prepause_time = update_task->get_elapsed_time();
-        if (m_paused) return 0;
-        else m_paused = true;
-        if (!m_paused) return 1;
-        return 0;
-    }
-
-    // returns success/failure
-    bool resume() {
-        // keep track of how long spent paused for timekeeping
-        m_time_paused += update_task->get_elapsed_time() - m_prepause_time;
-        if (!m_paused) return 0;
-        else m_paused = false;
-        if (m_paused) return 1;
-        return 0;
-    }
-
-    // returns pause state
-    bool toggle_pause() {
-        if (m_paused) resume();
-        else pause();
-        return m_paused;
-    }
-};
-
-/*AsyncTask::DoneStatus process_task(GenericAsyncTask* task, void* data) {
-    Process* proc = (Process*)data;
-    if (task->get_elapsed_time() - proc->m_time_paused < time) return AsyncTask::DS_cont;
-    bool result_exchange = proc->do_exchange();
-    if (!result_exchange) return AsyncTask::DS_again;
-    return AsyncTask::DS_done;
-}*/
 
 // put these on the heap: each acts as an arena for all contained data
 class Cell {
@@ -157,6 +60,7 @@ private:
     Resource m_oil;
     Resource m_amo;
     std::vector<Process> m_metabolism;
+    std::vector<PT(AsyncTask)> m_tasks;
     int m_abilities;
 public:
     Cell(int idx, float size, int abilities) 
@@ -174,136 +78,117 @@ public:
                                      << ", oils " << m_oil.qty << ", amino " << m_amo.qty << ".\n";
     }
 
-    // TODO constructor for passing in sequence of values for initial resources
-    // TODO constructor for initialising a metabolism
+    // TODO constructor for passing in a sequence of values to set initial resources
 
-    float get_water() {
-        return m_wtr.qty;
+    // RESOURCE METHODS
+
+    Resource* get_res_ptr(unsigned int res_idx) {
+        Resource* resource_ptr = nullptr;
+        switch (res_idx) {
+            case ResourceTypes(WATER): resource_ptr = &m_wtr; break;
+            case ResourceTypes(SALTS): resource_ptr = &m_slt; break;
+            case ResourceTypes(CARBS): resource_ptr = &m_crb; break;
+            case ResourceTypes(SUGAR): resource_ptr = &m_sgr; break;
+            case ResourceTypes(OILS):  resource_ptr = &m_oil; break;
+            case ResourceTypes(AMINO): resource_ptr = &m_amo; break;
+        }
+        return resource_ptr;
+    }
+
+    float get_resource(unsigned int res_idx) {
+        return get_res_ptr(res_idx)->qty;
     }
 
     // return 1 if insufficient funds
-    bool spend_water(float qty) {
-        if (m_wtr.qty < qty) return 1;
+    bool spend_resource(unsigned int res_idx, float qty) {
+        Resource* resource_ptr = get_res_ptr(res_idx);
+        if (resource_ptr->qty < qty) return 1;
         
-        m_wtr.qty -= qty;
+        resource_ptr->qty -= qty;
         return 0;
     }
 
-    float add_water(float qty) {
-        m_wtr.qty = std::min(m_wtr.qty + qty, m_wtr.max);
-        return m_wtr.qty;
+    float add_resource(unsigned int res_idx, float qty) {
+        Resource* resource_ptr = get_res_ptr(res_idx);
+        resource_ptr->qty = std::min(resource_ptr->qty + qty, resource_ptr->max);
+        return resource_ptr->qty;
     }
 
-    float get_salts() {
-        return m_slt.qty;
-    }
+    // PROCESS METHODS
 
-    // return 1 if insufficient funds
-    bool spend_salts(float qty) {
-        if (m_slt.qty < qty) return 1;
-        
-        m_slt.qty -= qty;
+    // returns success/failure
+    bool pause(unsigned int task_id) {
+        // note time at which task is paused
+        m_metabolism[task_id].prepause_time = m_tasks[task_id]->get_elapsed_time();
+        if (m_metabolism[task_id].paused) return 0;
+        else m_metabolism[task_id].paused = true;
+        if (!m_metabolism[task_id].paused) return 1;
         return 0;
     }
 
-    float add_salts(float qty) {
-        m_slt.qty = std::min(m_slt.qty + qty, m_slt.max);
-        return m_slt.qty;
-    }
-
-    float get_sugar() {
-        return m_sgr.qty;
-    }
-
-    // return 1 if insufficient funds
-    bool spend_sugar(float qty) {
-        if (m_sgr.qty < qty) return 1;
-        
-        m_sgr.qty -= qty;
+    // returns success/failure
+    bool resume(unsigned int task_id) {
+        // keep track of how long spent paused for timekeeping
+        m_metabolism[task_id].time_paused += m_tasks[task_id]->get_elapsed_time() - m_metabolism[task_id].prepause_time;
+        if (!m_metabolism[task_id].paused) return 0;
+        else m_metabolism[task_id].paused = false;
+        if (m_metabolism[task_id].paused) return 1;
         return 0;
     }
 
-    float add_sugar(float qty) {
-        m_sgr.qty = std::min(m_sgr.qty + qty, m_sgr.max);
-        return m_sgr.qty;
+    // returns pause state
+    bool toggle_pause_task(unsigned int task_id) {
+        if (m_metabolism[task_id].paused) resume(task_id);
+        else pause(task_id);
+        return m_metabolism[task_id].paused;
     }
 
-    float get_carbs() {
-        return m_crb.qty;
-    }
+    // returns success/failure
+    bool do_exchange(unsigned int task_id) {
+        // TODO acquire the GIL
+        std::cout << "--c> Doing exchange for task " << task_id << "; Resources: "
+            << m_metabolism[task_id].input << " in, " << m_metabolism[task_id].output << " out.\n";
 
-    // return 1 if insufficient funds
-    bool spend_carbs(float qty) {
-        if (m_crb.qty < qty) return 1;
-        
-        m_crb.qty -= qty;
+        // fail if insufficient input resource
+        if (get_resource(m_metabolism[task_id].input) < m_metabolism[task_id].cost) return 1;
+        // charge input and yield to output
+        spend_resource(m_metabolism[task_id].input, m_metabolism[task_id].cost);
+        add_resource(m_metabolism[task_id].output, m_metabolism[task_id].yield);
+        // reset pause timer
+        m_metabolism[task_id].prepause_time = 0.;
+        m_metabolism[task_id].time_paused = 0.;
+
+        // TODO release the GIL
+
+        // return success
         return 0;
     }
 
-    float add_carbs(float qty) {
-        m_crb.qty = std::min(m_crb.qty + qty, m_crb.max);
-        return m_crb.qty;
-    }
-
-    float get_oils() {
-        return m_oil.qty;
-    }
-
-    // return 1 if insufficient funds
-    bool spend_oils(float qty) {
-        if (m_oil.qty < qty) return 1;
-        
-        m_oil.qty -= qty;
-        return 0;
-    }
-
-    float add_oils(float qty) {
-        m_oil.qty = std::min(m_oil.qty + qty, m_oil.max);
-        return m_oil.qty;
-    }
-
-    float get_amino() {
-        return m_amo.qty;
-    }
-
-    // return 1 if insufficient funds
-    bool spend_amino(float qty) {
-        if (m_amo.qty < qty) return 1;
-        
-        m_amo.qty -= qty;
-        return 0;
-    }
-
-    float add_amino(float qty) {
-        m_amo.qty = std::min(m_amo.qty + qty, m_amo.max);
-        return m_amo.qty;
-    }
-
-    Process* add_process(PT(AsyncTaskManager) task_mgr_ptr, int in_type, int out_type, float cost, float yield, float time, bool start_paused) {
+    unsigned int add_process(unsigned int in_type, unsigned int out_type, float cost, float yield, float time, bool start_paused) {
         // extend the metabolism vector and initialise a new process in the new field
         std::cout << "--c> Cell initialising the construction of a new process:\n";
-        Resource* in_res;
-        Resource* out_res;
-        switch (in_type) {
-            case ResourceTypes(WATER): in_res = &m_wtr; break;
-            case ResourceTypes(SALTS): in_res = &m_slt; break;
-            case ResourceTypes(CARBS): in_res = &m_crb; break;
-            case ResourceTypes(SUGAR): in_res = &m_sgr; break;
-            case ResourceTypes(OILS):  in_res = &m_oil; break;
-            case ResourceTypes(AMINO): in_res = &m_amo; break;
-        }
-        switch (out_type) {
-            case ResourceTypes(WATER): out_res = &m_wtr; break;
-            case ResourceTypes(SALTS): out_res = &m_slt; break;
-            case ResourceTypes(CARBS): out_res = &m_crb; break;
-            case ResourceTypes(SUGAR): out_res = &m_sgr; break;
-            case ResourceTypes(OILS):  out_res = &m_oil; break;
-            case ResourceTypes(AMINO): out_res = &m_amo; break;
-        }
-        Process new_proc = Process(in_res, out_res, cost, yield, time, start_paused);
-        std::cout << "--c> New Process made! Placing process into cell's 'metabolism' vector:\n";
-        m_metabolism.emplace_back(new_proc);
-        return &m_metabolism.at(m_metabolism.size()-1);
+        
+        // store process data
+        m_metabolism.emplace_back(Process{0., 0., time, start_paused, in_type, out_type, cost, yield});
+        std::cout << "--c> Data struct made in cell's 'metabolism' vector!\n";
+        // create task
+        unsigned int proc_idx = m_metabolism.size()-1;
+        std::cout << "--c> Creating task for metabolic process:\n";
+        PT(AsyncTask) new_task = AsyncTaskManager::get_global_ptr()->add(
+            [&, proc_idx](AsyncTask* task) { 
+                //std::cout << "--c> task elapsed time: " << task->get_elapsed_time() 
+                //            << ", and timer length: " << this->time << ".\n";
+                if (task->get_elapsed_time() - this->m_metabolism[proc_idx].time_paused > this->m_metabolism[proc_idx].time) {
+                    if (!this->do_exchange(proc_idx)) std::cerr << "--c> EXCHANGE FAILED!\n";
+                    else {
+                        return AsyncTask::DS_again;
+                    }
+                }
+                return AsyncTask::DS_cont; // TODO throw error
+                //return AsyncTask::DS_done; 
+            }, "proc_task", 0);
+        std::cout << "--c> Process initialised.\n";
+        return proc_idx;
     }
 };
 
@@ -318,79 +203,23 @@ void Cell_delete(void* cellptr) {
     delete (Cell*)cellptr;
 }
 
-// water 
-float Cell_get_water(void* cellptr) {
-    return ((Cell*)cellptr)->get_water();
+// resource methods
+float Cell_get_resource(void* cellptr, unsigned int res_idx) {
+    return ((Cell*)cellptr)->get_resource(res_idx);
 }
-int Cell_spend_water(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_water(qty));
+int Cell_spend_resource(void* cellptr, unsigned int res_idx, float qty) {
+    return (int)(((Cell*)cellptr)->spend_resource(res_idx, qty));
 }
-float Cell_add_water(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_water(qty);
-}
-
-// salts
-float Cell_get_salts(void* cellptr) {
-    return ((Cell*)cellptr)->get_salts();
-}
-int Cell_spend_salts(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_salts(qty));
-}
-float Cell_add_salts(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_salts(qty);
-}
-
-// oils
-float Cell_get_oils(void* cellptr) {
-    return ((Cell*)cellptr)->get_oils();
-};
-int Cell_spend_oils(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_oils(qty));
-};
-float Cell_add_oils(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_oils(qty);
-};
-
-// sugar
-float Cell_get_sugar(void* cellptr) {
-    return ((Cell*)cellptr)->get_sugar();
-}
-int Cell_spend_sugar(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_sugar(qty));
-}
-float Cell_add_sugar(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_sugar(qty);
-}
-
-// carbs
-float Cell_get_carbs(void* cellptr) {
-    return ((Cell*)cellptr)->get_carbs();
-}
-int Cell_spend_carbs(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_carbs(qty));
-}
-float Cell_add_carbs(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_carbs(qty);
-}
-
-// amino
-float Cell_get_amino(void* cellptr) {
-    return ((Cell*)cellptr)->get_amino();
-}
-int Cell_spend_amino(void* cellptr, float qty) {
-    return (int)(((Cell*)cellptr)->spend_amino(qty));
-}
-float Cell_add_amino(void* cellptr, float qty) {
-    return ((Cell*)cellptr)->add_amino(qty);
+float Cell_add_resource(void* cellptr, unsigned int res_idx, float qty) {
+    return ((Cell*)cellptr)->add_resource(res_idx, qty);
 }
 
 // process (n.b. make sure to add task to taskmgr)
-void* Cell_add_process(void* cellptr, void* task_mgr_ptr, int in, int out, float cost, 
+unsigned int Cell_add_process(void* cellptr, unsigned int in, unsigned int out, float cost, 
                     float yield, float time, int start_paused) {
-    return (void*)(((Cell*)cellptr)->add_process((AsyncTaskManager*)task_mgr_ptr, in, 
-                    out, cost, yield, time, (bool)start_paused));
+    return (((Cell*)cellptr)->add_process(in, out, cost, yield, time, (bool)start_paused));
 }
 
-void* Process_get_task(void* proc) {
+/*void* Process_get_task(void* proc) {
     return (void*)(&(((Process*)proc)->update_task));
-}
+}*/
