@@ -145,6 +145,7 @@ public:
 
     // return 1 if insufficient funds
     bool spend_resource(unsigned int res_idx, float qty) {
+        // TODO AtomicAdjust ?
         Resource* resource_ptr = get_res_ptr(res_idx);
         if (resource_ptr->qty < qty) return 1;
         
@@ -153,6 +154,7 @@ public:
     }
 
     float add_resource(unsigned int res_idx, float qty) {
+        // TODO AtomicAdjust ?
         Resource* resource_ptr = get_res_ptr(res_idx);
         resource_ptr->qty = std::min(resource_ptr->qty + qty, resource_ptr->max);
         return resource_ptr->qty;
@@ -162,20 +164,20 @@ public:
 
     // returns success/failure
     bool pause(unsigned int task_id) {
+        if (m_metabolism[task_id].paused) return 0;
         // note time at which task is paused
         m_metabolism[task_id].prepause_time = m_tasks[task_id]->get_elapsed_time();
-        if (m_metabolism[task_id].paused) return 0;
-        else m_metabolism[task_id].paused = true;
+        m_metabolism[task_id].paused = true;
         if (!m_metabolism[task_id].paused) return 1;
         return 0;
     }
 
     // returns success/failure
     bool resume(unsigned int task_id) {
-        // keep track of how long spent paused for timekeeping
-        m_metabolism[task_id].time_paused += m_tasks[task_id]->get_elapsed_time() - m_metabolism[task_id].prepause_time;
         if (!m_metabolism[task_id].paused) return 0;
-        else m_metabolism[task_id].paused = false;
+        // keep track of how long spent paused 
+        m_metabolism[task_id].time_paused += m_tasks[task_id]->get_elapsed_time() - m_metabolism[task_id].prepause_time;
+        m_metabolism[task_id].paused = false;
         if (m_metabolism[task_id].paused) return 1;
         return 0;
     }
@@ -219,6 +221,8 @@ public:
         // store process data
         m_metabolism.emplace_back(Process{0., 0., time, start_paused, in_type, out_type, cost, yield});
         //std::cout << "--c> Data struct made in cell's 'metabolism' vector!\n";
+
+        // TODO AtomicAdjust ?
         // create task
         unsigned int proc_idx = m_metabolism.size()-1;
         //std::cout << "--c> Creating task for metabolic process:\n";
@@ -226,12 +230,14 @@ public:
             [&, proc_idx](AsyncTask* task) { 
                 //std::cout << "--c> task elapsed time: " << task->get_elapsed_time() 
                 //            << ", and timer length: " << this->time << ".\n";
-                if (task->get_elapsed_time() - this->m_metabolism[proc_idx].time_paused > this->m_metabolism[proc_idx].time) {
-                    if (this->do_exchange(proc_idx)) {
-                        std::cerr << "--c> EXCHANGE FAILED!\n";
-                        return AsyncTask::DS_done;
-                    } else return AsyncTask::DS_again;
-                }
+                if (!this->m_metabolism[proc_idx].paused)
+                    if (task->get_elapsed_time() - this->m_metabolism[proc_idx].time_paused > this->m_metabolism[proc_idx].time) {
+                        if (this->do_exchange(proc_idx)) {
+                            std::cout << "--c> Insufficient resources for exchange! Pausing metabolic process.\n";
+                            this->pause(proc_idx);
+                            return AsyncTask::DS_cont;
+                        } else return AsyncTask::DS_again;
+                    }
                 return AsyncTask::DS_cont; // TODO throw error
                 //return AsyncTask::DS_done; 
             }, "proc_task", 1);
