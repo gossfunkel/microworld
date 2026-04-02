@@ -3,12 +3,12 @@ from direct.interval.IntervalGlobal import *
 from direct.task.Task import Task
 from panda3d.core import load_prc_file_data, AsyncTaskManager
 import cell_life
-from cell_life import libcell
+from cell_life import Cell
 
 async def print_cellstats(task):
     await Wait(1.)
-    print(f"Py> Cell nrg: {libcell.Cell_get_resource(base.test_cell, 0)}")
-    print(f"Py> Cell sugar: {libcell.Cell_get_resource(base.test_cell, 5)}")
+    print(f"Py> Cell nrg: {base.test_cell.get_resource(0)}")
+    print(f"Py> Cell sugar: {base.test_cell.get_resource(5)}")
     return task.again
 
 if __name__ == '__main__':
@@ -23,32 +23,29 @@ if __name__ == '__main__':
 
     async_task_mgr = AsyncTaskManager.getGlobalPtr()
 
-    base.test_cell = libcell.Cell_new(0, 1., 0)
-
+    base.test_cell = Cell(1., 0)
     base.taskMgr.add(print_cellstats, "pr_cellstats")
 
-    print(f"Py> Cell carbs: {libcell.Cell_get_resource(base.test_cell, 6)}")
-    libcell.Cell_add_resource(base.test_cell, 6, 2.)
-    print(f"Py> Carbs after adding 2: {libcell.Cell_get_resource(base.test_cell, 6)}")
-    print(f"Py> Cell water level: {libcell.Cell_get_resource(base.test_cell, 3)}")
-    libcell.Cell_spend_resource(base.test_cell, 3, 3.)
-    print(f"Py> Water after spending 3: {libcell.Cell_get_resource(base.test_cell, 3)}")
+    print(f"Py> Cell carbs: {base.test_cell.get_resource(6)}")
+    base.test_cell.add_resource(6, 2.)
+    print(f"Py> Carbs after adding 2: {base.test_cell.get_resource(6)}")
+    print(f"Py> Cell water level: {base.test_cell.get_resource(3)}")
+    base.test_cell.spend_resource(3, 3.)
+    print(f"Py> Water after spending 3: {base.test_cell.get_resource(3)}")
 
     # 1 carbs in, 1 sugar out 
-    base.test_proc_idx = libcell.Cell_add_process(base.test_cell, 6, 5, 1., 1., 1., 0)
+    base.test_proc_idx = base.test_cell.add_process(6, 5, 1., 1., 1., 0)
 
     test_pause_resume = Sequence(
         Wait(3.),
         Func(print, "Py> Pausing carb-sugar metabolic task:"),
-        Func(libcell.Cell_pause_process, base.test_cell, base.test_proc_idx),
+        Func(base.test_cell.pause, base.test_proc_idx),
         Wait(5.),
         Func(print, "Py> Resuming carb-sugar metabolic task:"),
-        Func(libcell.Cell_resume_process, base.test_cell, base.test_proc_idx)
+        Func(base.test_cell.resume, base.test_proc_idx)
     ).start()
 
     #base.accept("escape", base.userExit)
     base.run()
 
-    libcell.Cell_delete(base.test_cell)
     print(" = = =  python testing concluded. goodbye!  = = = ")
-

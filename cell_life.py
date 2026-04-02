@@ -51,3 +51,36 @@ libcell.Cell_toggle_process.restype = c_int
 
 # libcell.Process_get_task.argtypes = [c_void_p]
 # libcell.Process_get_task.restype  = c_void_p
+
+libcell.num_cells: int = 0
+
+class Cell():
+    def __init__(self, size: float, abilities: int):
+        libcell.num_cells += 1
+        self.ptr = libcell.Cell_new(libcell.num_cells, size, abilities)
+        self.metabolism = []
+
+    def __del__(self):
+        libcell.Cell_delete(self.ptr)
+
+    def get_resource(self, res_idx: int):
+        return libcell.Cell_get_resource(self.ptr, res_idx)
+
+    def add_resource(self, res_idx: int, qty: float):
+        if libcell.Cell_add_resource(self.ptr, res_idx, qty):
+            print("Could not add resource!")
+
+    def spend_resource(self, res_idx: int, qty: float):
+        return libcell.Cell_spend_resource(self.ptr, res_idx, qty)
+
+    def add_process(self, in_type: int, out_type: int, cost: float, yld: float, time: float, start_paused: bool):
+        self.metabolism.append(libcell.Cell_add_process(self.ptr, in_type, out_type, cost, c_float(yld), c_float(time), c_int(start_paused)))
+        return len(self.metabolism) - 1
+
+    def pause(self, proc_idx: int):
+        if libcell.Cell_pause_process(self.ptr, self.metabolism[proc_idx]):
+            print(f"Failed to pause process {proc_idx}!")
+
+    def resume(self, proc_idx: int):
+        if libcell.Cell_resume_process(self.ptr, self.metabolism[proc_idx]):
+            print(f"Failed to resume process {proc_idx}!")
