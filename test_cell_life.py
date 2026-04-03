@@ -11,6 +11,18 @@ async def print_cellstats(task):
     print(f"Py> Cell sugar: {base.test_cell.get_resource(5)}")
     return task.again
 
+def killcell(task):
+    if (base.test_cell.dying()): 
+        del base.test_cell
+        base.test_cell = None
+        taskMgr.remove("pr_cellstats")
+        return task.done
+    return task.cont
+
+def make_test_cell():
+    base.test_cell = Cell("test_cell", (0.,1.,0.,1.), 1., 0)
+    base.taskMgr.add(print_cellstats, "pr_cellstats")
+
 if __name__ == '__main__':
     print(" = = =  TESTING cell_life library python wrapper  = = = ")
 
@@ -23,8 +35,7 @@ if __name__ == '__main__':
 
     async_task_mgr = AsyncTaskManager.getGlobalPtr()
 
-    base.test_cell = Cell(1., 0)
-    base.taskMgr.add(print_cellstats, "pr_cellstats")
+    make_test_cell()
 
     print(f"Py> Cell carbs: {base.test_cell.get_resource(6)}")
     base.test_cell.add_resource(6, 2.)
@@ -44,6 +55,8 @@ if __name__ == '__main__':
         Func(print, "Py> Resuming carb-sugar metabolic task:"),
         Func(base.test_cell.resume, base.test_proc_idx)
     ).start()
+
+    base.taskMgr.add(killcell, "killcell")
 
     #base.accept("escape", base.userExit)
     base.run()

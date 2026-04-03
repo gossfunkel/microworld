@@ -56,7 +56,7 @@ class Cell:
 
         # now set up accessories
         self.bong           = base.sfx.add_bong(bong_freq)          # generate sound effect at given freq
-        self.mols          = []                                     # array for mols on Cell
+        self.mols           = []                                    # array for mols on Cell
         self.spinner: float = 0                                     # this tells mols on this Cell how to rotate neatly
         self.num_mols: int = len(self.mols)                         # to help with angle calculations
 

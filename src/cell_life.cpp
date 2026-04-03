@@ -6,14 +6,17 @@
 enum ResourceTypes {
     NRG,
     HP,
-    CELLSIZE,
-    WATER,
+    CELLSIZE, // only one with no associated moltype - should i refactor it? 
+    WATER, 
     SALTS,
     SUGAR,
     CARBS,
     OILS,
     AMINO,
 };
+// alternative idea for cellsize mol: empty vesicle
+//  redesign mols to look like little cells containing resources
+//  sprite art and/or simple models for each resource?
 
 // TODO swap for bit masks
 enum Ability {
@@ -43,10 +46,11 @@ typedef struct Process {
     float yield;
 } Process;
 
-// api interface to library (methods at bottom of file)
+// api interface for library (methods at bottom of file)
 extern "C" {
     void* Cell_new(int idx, float size, int bits);
     void Cell_delete(void* cellptr);
+    int Cell_is_dying(void* cellptr);
     float Cell_get_resource(void* cellptr, unsigned int res_idx);
     int Cell_spend_resource(void* cellptr, unsigned int res_idx, float qty);
     float Cell_add_resource(void* cellptr, unsigned int res_idx, float qty);
@@ -72,13 +76,15 @@ private:
     Resource m_crb;
     Resource m_oil;
     Resource m_amo;
-    PT(AsyncTask) life_task;
+    PT(AsyncTask) life_task; // TODO does this prevent rule of zero (default move constructors)?
     std::vector<Process> m_metabolism;
     std::vector<PT(AsyncTask)> m_tasks;
     int m_abilities;
 public:
+    bool dying;
     Cell(int idx, float size, int abilities) 
-        : m_idx {idx}, m_nrg_tick_rate {.01f}, m_nrg_tick_cost {.001f}, m_abilities {abilities} {
+        : m_idx {idx}, m_nrg_tick_rate {.01f}, m_nrg_tick_cost {.001f}, 
+            m_abilities {abilities}, dying {false} {
         std::cout << "--c> Constructing new cell!\n";
         m_nrg = Resource(ResourceTypes(NRG),  10.f, 10.f);
         m_hp  = Resource(ResourceTypes(HP),   10.f, 10.f);
@@ -98,8 +104,8 @@ public:
                 //            << ", and timer length: " << this->time << ".\n";
                 if (task->get_elapsed_time() > this->m_nrg_tick_rate) {
                     if (get_resource(ResourceTypes(NRG)) < this->m_nrg_tick_cost) {
-                        std::cout << "--c> Cell died!\n";
-                        Cell_delete(this);
+                        std::cout << "--c> Cell out of energy!\n";
+                        this->die();
                         return AsyncTask::DS_done;
                     } else spend_resource(ResourceTypes(NRG), this->m_nrg_tick_cost);
                     
@@ -110,6 +116,54 @@ public:
         //std::cout << "--c> new cell resources: water " << m_wtr.qty << ", salts " << m_slt.qty 
         //                               << ", sugar " << m_sgr.qty << ", carbs " << m_crb.qty 
         //                             << ", oils " << m_oil.qty << ", amino " << m_amo.qty << ".\n";
+    }
+
+    Cell(Cell&& mv_cell) noexcept
+        : m_idx ( std::move(mv_cell.m_idx) ), 
+          m_nrg_tick_rate ( std::move(mv_cell.m_nrg_tick_rate) ),
+          m_nrg_tick_cost ( std::move(mv_cell.m_nrg_tick_cost) ),
+          m_nrg ( std::move(mv_cell.m_nrg) ),
+          m_hp ( std::move(mv_cell.m_hp) ),
+          m_sze ( std::move(mv_cell.m_sze) ),
+          m_wtr ( std::move(mv_cell.m_wtr) ),
+          m_slt ( std::move(mv_cell.m_slt) ),
+          m_sgr ( std::move(mv_cell.m_sgr) ),
+          m_crb ( std::move(mv_cell.m_crb) ),
+          m_oil ( std::move(mv_cell.m_oil) ),
+          m_amo ( std::move(mv_cell.m_amo) ),
+          life_task ( std::move(mv_cell.life_task) ),
+          m_metabolism ( std::move(mv_cell.m_metabolism) ),
+          m_tasks ( std::move(mv_cell.m_tasks) ),
+          m_abilities ( std::move(mv_cell.m_abilities) ),
+          dying ( std::move(mv_cell.dying) ) {
+        std::cout << "--c> moving cell :O\n";
+        mv_cell.m_tasks.clear();
+        mv_cell.m_metabolism.clear();
+        mv_cell.life_task = nullptr;
+    }
+
+    Cell& operator=( Cell&& mv_cell ) {
+        life_task->remove();
+        delete life_task;
+        m_idx = std::move(mv_cell.m_idx);
+        m_nrg_tick_rate = std::move(mv_cell.m_nrg_tick_rate);
+        m_nrg_tick_cost = std::move(mv_cell.m_nrg_tick_cost);
+        m_nrg = std::move(mv_cell.m_nrg);
+        m_hp = std::move(mv_cell.m_hp);
+        m_sze = std::move(mv_cell.m_sze);
+        m_wtr = std::move(mv_cell.m_wtr);
+        m_slt = std::move(mv_cell.m_slt);
+        m_sgr = std::move(mv_cell.m_sgr);
+        m_crb = std::move(mv_cell.m_crb);
+        m_oil = std::move(mv_cell.m_oil);
+        m_amo = std::move(mv_cell.m_amo);
+        life_task = std::move(mv_cell.life_task);
+        m_metabolism = std::move(mv_cell.m_metabolism);
+        m_tasks = std::move(mv_cell.m_tasks);
+        m_abilities = std::move(mv_cell.m_abilities);
+        dying = std::move(mv_cell.dying);
+        mv_cell.life_task = nullptr;
+        return *this;
     }
 
     // TODO constructor for passing in a sequence of values to set initial resources
@@ -245,6 +299,10 @@ public:
         std::cout << "--c> Cell initialised new metabolic process.\n";
         return proc_idx;
     }
+
+    void die() {
+        this->dying = true;
+    }
 };
 
 // LIBRARY BINDING METHODS ----------
@@ -257,6 +315,10 @@ void* Cell_new(int idx, float size, int bits) {
 }
 void Cell_delete(void* cellptr) {
     delete (Cell*)cellptr;
+}
+
+int Cell_is_dying(void* cellptr) {
+    return (int)(((Cell*)cellptr)->dying);
 }
 
 // RESOURCE METHODS ----------
